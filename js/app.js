@@ -556,8 +556,10 @@ function pintaHoja(nueva = false) {
   }
   const previo = cont.querySelector('.hoja-cuerpo')?.scrollTop ?? 0;
   const baja = ['nivel', 'confirmar'].includes(ui.hoja.tipo);
-  cont.innerHTML = `<div class="velo ${nueva ? 'entra' : ''}" data-accion="cerrarHoja"></div>
-    <section class="hoja ${baja ? 'baja' : ''} ${nueva ? 'entra' : ''}" role="dialog" aria-modal="true">${HOJAS[ui.hoja.tipo]()}</section>`;
+  // El chat de Stormy es una ventana pequeña y flotante, no una hoja a pantalla completa.
+  const chat = ui.hoja.tipo === 'nimbo';
+  cont.innerHTML = `<div class="velo ${chat ? 'suave' : ''} ${nueva ? 'entra' : ''}" data-accion="cerrarHoja"></div>
+    <section class="hoja ${baja ? 'baja' : ''} ${chat ? 'flotante' : ''} ${nueva ? 'entra' : ''}" role="dialog" aria-modal="true">${HOJAS[ui.hoja.tipo]()}</section>`;
   document.body.classList.add('con-hoja');
   const cuerpo = cont.querySelector('.hoja-cuerpo');
   if (cuerpo && !nueva) cuerpo.scrollTop = previo;
@@ -829,6 +831,16 @@ document.addEventListener('visibilitychange', () => {
     if (!ui.hoja) pinta();
   }
 });
+
+// Con el teclado abierto en el móvil, la ventana del chat sube para que el campo de texto siga a la vista.
+if (window.visualViewport) {
+  const ajusta = () => {
+    const tapado = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop);
+    document.documentElement.style.setProperty('--teclado', `${Math.round(tapado)}px`);
+  };
+  visualViewport.addEventListener('resize', ajusta);
+  visualViewport.addEventListener('scroll', ajusta);
+}
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
