@@ -594,7 +594,8 @@ function descarga(nombre, tipo, contenido) {
 function recordatorioICS(hora) {
   const [h, min] = hora.split(':');
   const hoy = hoyIso().replaceAll('-', '');
-  const url = location.origin + location.pathname;
+  // El enlace del aviso abre directamente el registro: alarma, un toque en el enlace y elegir la opción.
+  const url = `${location.origin}${location.pathname}?hoja=registro`;
   const sello = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
   return [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Stormy//Recordatorio//ES', 'CALSCALE:GREGORIAN',
