@@ -133,6 +133,10 @@ export const ficha = (tiempo, lado = 44) => {
   return `<span class="ficha" style="width:${lado}px;height:${lado}px;border-radius:${Math.round(lado * 0.3)}px;background:linear-gradient(${c[0]},${c[1]} 55%,${c[2]})">${iconoTiempo(tiempo, Math.round(lado * 0.62))}</span>`;
 };
 
+/** Retrato de Nimbo: una nube con cara sobre su trozo de cielo. */
+export const avatarNimbo = (lado = 44) =>
+  `<span class="avatar-nimbo" style="width:${lado}px;height:${lado}px"><svg viewBox="0 0 64 64" width="${Math.round(lado * 0.8)}" height="${Math.round(lado * 0.8)}" aria-hidden="true">${nube(0, 4)}<circle cx="25" cy="33" r="2.6" fill="#1C2340"/><circle cx="38" cy="33" r="2.6" fill="#1C2340"/><path d="M26.5 39.500c2.800 2.800 7.200 2.800 10 0" fill="none" stroke="#1C2340" stroke-width="2.200" stroke-linecap="round"/><circle cx="20.500" cy="38" r="2.400" fill="#FF8A3D" opacity=".55"/><circle cx="42.500" cy="38" r="2.400" fill="#FF8A3D" opacity=".55"/></svg></span>`;
+
 const trazo = (d, extra = '') =>
   `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 
@@ -143,6 +147,7 @@ export const ICONOS = {
   ajustes: trazo('<circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>', 'stroke-width="1.7"'),
   candado: trazo('<rect x="5" y="10.5" width="14" height="10" rx="2.8" fill="currentColor" stroke="none"/><path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7"/>'),
   mas: trazo('<path d="M12 5v14M5 12h14"/>', 'stroke-width="2.6"'),
+  subir: trazo('<path d="M12 19V6M6.500 11.500L12 6l5.500 5.500"/>', 'stroke-width="2.6"'),
   lapiz: trazo('<path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z"/>'),
   izquierda: trazo('<path d="M15 5l-7 7 7 7"/>', 'stroke-width="2.6"'),
   derecha: trazo('<path d="M9 5l7 7-7 7"/>', 'stroke-width="2.6"'),

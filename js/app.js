@@ -4,8 +4,9 @@ import {
   nivelActual, nivelSiguiente, racha, tiempoDe,
 } from './motor.js';
 import {
-  APP, ETIQUETAS, ICONOS, INSIGNIAS, ORDEN_TIEMPOS, TIEMPOS, consejoDe, ficha, fraseHoroscopo, iconoTiempo, signo,
+  APP, ETIQUETAS, ICONOS, INSIGNIAS, ORDEN_TIEMPOS, TIEMPOS, avatarNimbo, consejoDe, ficha, fraseHoroscopo, iconoTiempo, signo,
 } from './contenido.js';
+import { NIMBO, responder, saludo } from './asistente.js';
 import {
   borrarTodo, cargar, extrasDe, guardar, muestrasDe, nombreDe, reglasDe, sembrar, totalExtras,
 } from './datos.js';
@@ -21,6 +22,8 @@ const ui = {
   borrador: null,
   alta: { consiente: false, nombre: '', conNacimiento: false, nacimiento: '1992-06-15', sigueCiclo: false, ultimaRegla: hoyIso(), duracion: 28, hora: '21:30' },
   instalar: null,
+  chat: [],
+  pensando: false,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -51,7 +54,7 @@ const diasRegistrados = () => Object.keys(estado.entradas).length;
   if (q.has('paso')) ui.paso = Number(q.get('paso')) || 0;
   // Se quitan de la dirección para que recargar la página no vuelva a borrar ni a sembrar datos.
   if (q.has('reiniciar') || q.has('demo')) history.replaceState(null, '', location.pathname);
-  if (q.has('hoja') && estado.perfil.alta) setTimeout(() => acciones[{ registro: 'abrirRegistro', niveles: 'abrirNiveles' }[q.get('hoja')] ?? 'abrirRegistro']({}), 0);
+  if (q.has('hoja') && estado.perfil.alta) setTimeout(() => acciones[{ registro: 'abrirRegistro', niveles: 'abrirNiveles', nimbo: 'abrirNimbo' }[q.get('hoja')] ?? 'abrirRegistro']({}), 0);
 }
 
 // ---------- Piezas comunes ----------
@@ -243,6 +246,44 @@ function hojaNivelNuevo() {
       <p>Llevas ${n.dias} días registrados. Ahora tienes: ${n.premio.toLowerCase()}.</p>
     </div>
     <div class="hoja-pie"><button class="principal" data-accion="cerrarHoja">Genial</button></div>`;
+}
+
+// ---------- Nimbo, el ayudante ----------
+
+const contextoNimbo = () => ({ motor: motor(), entradas: estado.entradas, perfil: estado.perfil, hoy: hoyIso() });
+
+function hojaNimbo() {
+  const mensajes = ui.chat
+    .map((m) => `<div class="burbuja ${m.de}">${m.de === 'nimbo' ? avatarNimbo(30) : ''}<p>${esc(m.texto)}</p></div>`)
+    .join('');
+  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatarNimbo(30)}<p class="puntos-pensando" aria-label="Nimbo está escribiendo"><i></i><i></i><i></i></p></div>` : '';
+  return `<div class="hoja-cab nimbo-cab">${avatarNimbo(44)}<div><h3>${NIMBO.nombre}</h3><p>${NIMBO.cargo}</p></div><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
+    <div class="hoja-cuerpo chat" role="log" aria-live="polite">${mensajes}${pensando}</div>
+    <div class="hoja-pie nimbo-pie">
+      <div class="sugerencias">${NIMBO.sugerencias.map((s) => `<button type="button" class="opcion" data-accion="preguntar" data-q="${esc(s)}">${s}</button>`).join('')}</div>
+      <form id="form-nimbo" autocomplete="off"><input type="text" id="pregunta" placeholder="Pregúntale a Nimbo" enterkeyhint="send" maxlength="140" aria-label="Tu pregunta para Nimbo"><button type="submit" class="enviar" aria-label="Enviar">${ICONOS.subir}</button></form>
+    </div>`;
+}
+
+function preguntaANimbo(texto) {
+  const pregunta = texto.trim();
+  if (!pregunta || ui.pensando) return;
+  const teniaFoco = document.activeElement?.id === 'pregunta';
+  ui.chat.push({ de: 'yo', texto: pregunta });
+  ui.pensando = true;
+  pintaHoja();
+  if (teniaFoco) $('#pregunta')?.focus();
+  setTimeout(() => {
+    const turno = ui.chat.filter((m) => m.de === 'yo').length;
+    ui.chat.push({ de: 'nimbo', texto: responder(pregunta, contextoNimbo(), turno).texto });
+    ui.pensando = false;
+    if (ui.hoja?.tipo !== 'nimbo') return;
+    const foco = document.activeElement?.id === 'pregunta';
+    const escrito = $('#pregunta')?.value ?? '';
+    pintaHoja();
+    if ($('#pregunta')) $('#pregunta').value = escrito;
+    if (foco) $('#pregunta')?.focus();
+  }, 450);
 }
 
 function hojaConfirmar() {
@@ -488,10 +529,12 @@ function pinta({ arriba = false } = {}) {
     ? PESTANAS.map(([id, nombre, icono]) => `<button type="button" class="${ui.pestana === id ? 'on' : ''}" ${ui.pestana === id ? 'aria-current="page"' : ''} data-accion="pestana" data-id="${id}">${ICONOS[icono]}<span>${nombre}</span></button>`).join('')
     : '';
   $('#barra').hidden = !alta;
+  $('#nimbo').innerHTML = alta ? avatarNimbo(58) : '';
+  $('#nimbo').hidden = !alta;
   scrollTo(0, y);
 }
 
-const HOJAS = { registro: hojaRegistro, niveles: hojaNiveles, nivel: hojaNivelNuevo, confirmar: hojaConfirmar, texto: hojaTexto };
+const HOJAS = { registro: hojaRegistro, niveles: hojaNiveles, nivel: hojaNivelNuevo, confirmar: hojaConfirmar, texto: hojaTexto, nimbo: hojaNimbo };
 
 function pintaHoja(nueva = false) {
   const cont = $('#hoja');
@@ -507,6 +550,7 @@ function pintaHoja(nueva = false) {
   document.body.classList.add('con-hoja');
   const cuerpo = cont.querySelector('.hoja-cuerpo');
   if (cuerpo && !nueva) cuerpo.scrollTop = previo;
+  if (cuerpo && ui.hoja.tipo === 'nimbo') cuerpo.scrollTop = cuerpo.scrollHeight;
   if (nueva) cont.querySelector('.hoja').focus?.();
 }
 
@@ -629,6 +673,13 @@ const acciones = {
   abrirNiveles() {
     abreHoja({ tipo: 'niveles' });
   },
+  abrirNimbo() {
+    if (!ui.chat.length) ui.chat.push({ de: 'nimbo', texto: saludo(contextoNimbo()) });
+    abreHoja({ tipo: 'nimbo' });
+  },
+  preguntar(d) {
+    preguntaANimbo(d.q);
+  },
   mes(d) {
     const [a, m] = ui.mes.split('-').map(Number);
     const f = new Date(Date.UTC(a, m - 1 + Number(d.d), 1));
@@ -735,9 +786,18 @@ function alCambiar(ev) {
 }
 document.addEventListener('input', alCambiar);
 
+document.addEventListener('submit', (ev) => {
+  if (ev.target.id !== 'form-nimbo') return;
+  ev.preventDefault();
+  const campo = $('#pregunta');
+  const texto = campo.value;
+  campo.value = '';
+  preguntaANimbo(texto);
+});
+
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && ui.hoja) acciones.cerrarHoja();
-  if (ev.key === 'Enter' && ev.target.matches?.('input[type=text]')) ev.target.blur();
+  if (ev.key === 'Enter' && ev.target.matches?.('input[type=text]') && ev.target.id !== 'pregunta') ev.target.blur();
 });
 
 addEventListener('beforeinstallprompt', (ev) => {
