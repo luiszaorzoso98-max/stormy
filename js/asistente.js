@@ -5,8 +5,8 @@ import { FASES, SEMANA, aIso, aNum, diaSemana, diasDePronostico, nivelActual, ni
 import { TIEMPOS, consejoDe, fraseHoroscopo, signo } from './contenido.js';
 
 export const NIMBO = {
-  nombre: 'Nimbo',
-  cargo: 'Meteorólogo de guardia',
+  nombre: 'Stormy',
+  cargo: 'Predictor de tormentas',
   sugerencias: ['¿Qué tal hoy?', '¿Y mañana?', '¿Cuándo propongo un plan?', '¿Qué le afecta?', '¿Aciertas mucho?', '¿Cómo va el mes?'],
 };
 
@@ -44,7 +44,7 @@ export function responder(pregunta, ctx, giro = 0) {
 
   // --- Quién es y qué hace con los datos ---
   if (hay(' quien eres', ' como te llamas', ' que eres', ' presentate', ' tu nombre')) {
-    return r('identidad', `Soy Nimbo, meteorólogo de guardia en vuestra casa. Miro los partes que apuntas y busco patrones. No leo mentes ni hago magia: solo cuento nubes. Ahora mismo tengo ${plural(dias, 'día', 'días')} de datos.`);
+    return r('identidad', `Soy Stormy. Nací en mitad de una discusión por el mando de la tele y desde entonces vigilo el cielo de vuestra casa. No leo mentes ni tomo partido: aviso de cuándo puede tronar. Ahora mismo tengo ${plural(dias, 'día', 'días')} de datos.`);
   }
   if (hay(' privacidad', ' mis datos', ' los datos', ' espia', ' guardas', ' servidor')) {
     return r('privacidad', 'Todo lo que sé vive en este dispositivo. No tengo servidor, ni cuenta, ni a quién contárselo. Y si me borras, me llevo el secreto a la tumba.');
@@ -95,7 +95,7 @@ export function responder(pregunta, ctx, giro = 0) {
   if (hay(' sueno', ' dorm', ' estres', ' afecta', ' influye', ' factor', ' depende', ' le sienta')) {
     if (dias < 14) return r('factores', `Para hablar de causas necesito 14 días y llevo ${dias}. Mientras tanto, marca sueño, estrés y etiquetas al registrar: es mi materia prima.`);
     const fs = motor.factores().slice(0, 3);
-    if (!fs.length) return r('factores', 'Me faltan datos extra. Apunta sueño, estrés y lo que pasa cada día, y te diré qué mueve el barómetro.');
+    if (!fs.length) return r('factores', 'Me faltan datos extra. Apunta sueño, estrés y lo que pasa cada día, y te diré qué mueve el clima de casa.');
     const frase = fs.map((f) => `${f.titulo.toLowerCase()} (${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))})`).join(', ');
     return r('factores', `Lo que más coincide con los cambios: ${frase}. Son niveles sobre 5 y son coincidencias, no sentencias: yo observo, no acuso.`);
   }
@@ -210,7 +210,7 @@ export function responder(pregunta, ctx, giro = 0) {
   if (hay(' gracias')) return r('gracias', elige(['A mandar. Yo sigo aquí, mirando al cielo.', 'Para eso estamos. Abrígate si refresca.']));
   if (hay(' adios', ' hasta luego', ' chao', ' nos vemos')) return r('adios', 'Buen tiempo y buena suerte. Vuelve mañana con tu parte.');
   if (hay(' hola', ' buenas', ' hey', ' ey ', ' buenos dias')) {
-    return r('saludo', `¡Buenas! Aquí Nimbo, meteorólogo de guardia. Pregúntame por hoy, por mañana o por cuándo proponer ese plan.`);
+    return r('saludo', `¡Buenas! Aquí Stormy, predictor de tormentas. Pregúntame por hoy, por mañana o por cuándo proponer ese plan.`);
   }
 
   // --- No lo ha entendido ---
@@ -224,8 +224,8 @@ export function responder(pregunta, ctx, giro = 0) {
 export function saludo(ctx) {
   const dias = ctx.motor.dias;
   const ella = ctx.perfil.nombre?.trim() || 'tu pareja';
-  if (dias === 0) return `¡Buenas! Soy Nimbo, vuestro meteorólogo de guardia. Aún no tengo ni un parte de ${ella}, así que hoy hablo de oídas. Apunta el primero y empiezo a trabajar.`;
-  if (dias < 7) return `¡Buenas! Soy Nimbo. Llevo ${plural(dias, 'día', 'días')} observando el clima de la casa: todavía hablo con prudencia, pero pregunta lo que quieras.`;
-  if (dias < 30) return `¡Buenas! Aquí Nimbo, con ${dias} días de partes de ${ella}. Ya voy viendo patrones. ¿Qué quieres saber?`;
-  return `¡Buenas! Aquí Nimbo, con el mes completo estudiado. Pregunta sin miedo: hoy, mañana, la semana o cuándo proponer ese plan.`;
+  if (dias === 0) return `¡Buenas! Soy Stormy, vuestro predictor de tormentas. Aún no tengo ni un parte de ${ella}, así que hoy hablo de oídas. Apunta el primero y empiezo a trabajar.`;
+  if (dias < 7) return `¡Buenas! Soy Stormy. Llevo ${plural(dias, 'día', 'días')} observando el clima de la casa: todavía hablo con prudencia, pero pregunta lo que quieras.`;
+  if (dias < 30) return `¡Buenas! Aquí Stormy, con ${dias} días de partes de ${ella}. Ya voy viendo patrones. ¿Qué quieres saber?`;
+  return `¡Buenas! Aquí Stormy, con el mes completo estudiado. Pregunta sin miedo: hoy, mañana, la semana o cuándo proponer ese plan.`;
 }

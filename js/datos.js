@@ -2,7 +2,8 @@
 import { aIso, aNum, diaSemana, fase, hoyIso } from './motor.js';
 import { ETIQUETAS } from './contenido.js';
 
-const CLAVE = 'sicielo.v1';
+const CLAVE = 'stormy.v1';
+const CLAVE_ANTERIOR = 'sicielo.v1'; // nombre provisional anterior: se siguen leyendo sus datos
 
 export const perfilVacio = () => ({
   nombre: '',
@@ -21,7 +22,7 @@ let memoria = null; // respaldo si el navegador no deja usar localStorage (modo 
 
 export function cargar() {
   try {
-    const texto = localStorage.getItem(CLAVE);
+    const texto = localStorage.getItem(CLAVE) ?? localStorage.getItem(CLAVE_ANTERIOR);
     if (!texto) return estadoVacio();
     const e = JSON.parse(texto);
     return { perfil: { ...perfilVacio(), ...(e.perfil ?? {}) }, entradas: e.entradas ?? {} };
@@ -44,6 +45,7 @@ export function borrarTodo() {
   memoria = null;
   try {
     localStorage.removeItem(CLAVE);
+    localStorage.removeItem(CLAVE_ANTERIOR);
   } catch {
     /* sin almacenamiento disponible */
   }

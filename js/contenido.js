@@ -1,5 +1,5 @@
 // Textos, estados del tiempo e iconos. El nombre de la app se cambia aquí y en index.html / manifest.
-export const APP = { nombre: 'Sí, Cielo', lema: 'El parte del tiempo de tu casa' };
+export const APP = { nombre: 'Stormy', lema: 'Ve venir las tormentas. Disfruta más del sol.' };
 
 /** Los cinco estados del tiempo en casa. 1 = tormenta, 5 = soleado. */
 export const TIEMPOS = {

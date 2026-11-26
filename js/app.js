@@ -1,4 +1,4 @@
-// Sí, Cielo — aplicación web instalable. Sin dependencias ni servidor: todo se calcula y se guarda en el dispositivo.
+// Stormy — aplicación web instalable. Sin dependencias ni servidor: todo se calcula y se guarda en el dispositivo.
 import {
   Motor, NIVELES, OBJETIVO, SEMANA, aIso, aNum, diaSemana, diasDePronostico, hoyIso,
   nivelActual, nivelSiguiente, racha, tiempoDe,
@@ -167,7 +167,7 @@ function vistaHoy() {
       ${iconoTiempo(t, 132)}
       <h2>${TIEMPOS[t].titulo}</h2>
       <p class="sub">${entrada ? 'Parte de hoy registrado' : `Previsión para hoy con ${esc(nombreDe(perfil))}`}</p>
-      ${entrada ? `<p class="preveia">El barómetro preveía: ${TIEMPOS[p.tiempo].titulo.toLowerCase()}</p>` : ''}
+      ${entrada ? `<p class="preveia">Stormy preveía: ${TIEMPOS[p.tiempo].titulo.toLowerCase()}</p>` : ''}
       <div class="fiabilidad" role="img" aria-label="Fiabilidad del pronóstico: ${Math.round(p.fiabilidad * 100)} por ciento">
         <span>Fiabilidad</span><span class="medidor"><i style="width:${p.fiabilidad * 100}%"></i></span><b>${pct(p.fiabilidad)}</b>
       </div>
@@ -180,7 +180,7 @@ function vistaHoy() {
     <button class="tarjeta cristal boton-tarjeta" data-accion="abrirNiveles" aria-label="Nivel ${nivel.id + 1} de ${NIVELES.length}: ${nivel.titulo}. Abre la lista de niveles">
       <div class="nivel-cab"><span class="insignia">${ICONOS[nivel.icono]}</span><div><p class="sobre">Nivel ${nivel.id + 1} de ${NIVELES.length}</p><h3>${nivel.titulo}</h3></div><span class="flecha">${ICONOS.derecha}</span></div>
       ${barraNiveles(dias)}
-      <p class="nota">${sig ? `Día ${dias} de 30 · faltan ${sig.dias - dias} para «${sig.premio}»` : 'Mes completo: el barómetro ya conoce vuestro clima.'}</p>
+      <p class="nota">${sig ? `Día ${dias} de 30 · faltan ${sig.dias - dias} para «${sig.premio}»` : 'Mes completo: Stormy ya conoce vuestro clima.'}</p>
       <div class="datos"><span><i class="acento">${ICONOS.llama}</i><b>${racha(Object.keys(estado.entradas), hoy)}</b> de racha</span><span><i class="acento">${ICONOS.mas}</i><b>${totalExtras(estado)}</b> extras</span></div>
     </button>
     ${horoscopo}
@@ -206,7 +206,7 @@ function hojaRegistro() {
         <div class="fichas">${ORDEN_TIEMPOS.map((t) => `<button type="button" class="${b.animo === t ? 'on' : b.animo ? 'off' : ''}" style="--tinte:${TIEMPOS[t].tinte}" aria-label="${TIEMPOS[t].titulo}" aria-pressed="${b.animo === t}" data-accion="elegirTiempo" data-t="${t}">${ficha(t, 54)}</button>`).join('')}</div>
         <p class="${b.animo ? 'elegido' : ''}">${b.animo ? `${TIEMPOS[b.animo].titulo} · ${TIEMPOS[b.animo].desc}` : 'Toca el que más se parezca al día'}</p>
       </div>
-      <div class="extra-cab"><div><h3>Datos extra</h3><p>Opcionales. Cada dato afina el barómetro.</p></div>${extras ? `<span class="contador">+${extras}</span>` : ''}</div>
+      <div class="extra-cab"><div><h3>Datos extra</h3><p>Opcionales. Cada dato afina a Stormy.</p></div>${extras ? `<span class="contador">+${extras}</span>` : ''}</div>
       ${triple('¿Cómo ha dormido?', 'sueno', ['Mal', 'Regular', 'Bien'])}
       ${triple('Estrés del día', 'estres', ['Bajo', 'Medio', 'Alto'])}
       <div class="grupo"><h4>¿Qué ha pasado hoy?</h4><div class="chips">${ETIQUETAS.map((e) => `<button type="button" class="opcion ${b.etiquetas.includes(e) ? 'on' : ''}" aria-pressed="${b.etiquetas.includes(e)}" data-accion="etiqueta" data-e="${esc(e)}">${e}</button>`).join('')}</div></div>
@@ -224,14 +224,14 @@ function hojaNiveles() {
   return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Hecho</button></div>
     <div class="hoja-cuerpo">
       <h2>Niveles</h2>
-      <p class="fecha">Cada día registrado acerca al barómetro al mes completo que necesita para aprender.</p>
+      <p class="fecha">Cada día registrado acerca a Stormy al mes completo que necesita para aprender.</p>
       ${NIVELES.map((n) => {
         const ok = dias >= n.dias;
         return `<div class="tarjeta nivel ${ok ? '' : 'pendiente'}"><span class="insignia ${ok ? '' : 'gris'}">${ok ? ICONOS[n.icono] : ICONOS.candado}</span>
           <div><h3>${n.titulo}</h3><p>${n.premio}</p></div><b>${n.dias === 0 ? 'Inicio' : ok ? `Día ${n.dias}` : `Faltan ${n.dias - dias}`}</b></div>`;
       }).join('')}
       <div class="tarjeta"><div class="extra-cab"><h3>Datos extra</h3><span class="cifra-acento">${extras}</span></div>
-        <p class="nota">Sueño, estrés, etiquetas y notas. Cuantos más aportes, más factores puede explicar el barómetro.</p>
+        <p class="nota">Sueño, estrés, etiquetas y notas. Cuantos más aportes, más factores puede explicar Stormy.</p>
         <div class="insignias">${INSIGNIAS.map(([umbral, nombre]) => `<div class="${extras >= umbral ? 'on' : ''}"><span>${extras >= umbral ? ICONOS.medalla : ICONOS.candado}</span><b>${nombre}</b><small>${umbral} datos</small></div>`).join('')}</div>
       </div>
     </div>`;
@@ -256,12 +256,12 @@ function hojaNimbo() {
   const mensajes = ui.chat
     .map((m) => `<div class="burbuja ${m.de}">${m.de === 'nimbo' ? avatarNimbo(30) : ''}<p>${esc(m.texto)}</p></div>`)
     .join('');
-  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatarNimbo(30)}<p class="puntos-pensando" aria-label="Nimbo está escribiendo"><i></i><i></i><i></i></p></div>` : '';
+  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatarNimbo(30)}<p class="puntos-pensando" aria-label="Stormy está escribiendo"><i></i><i></i><i></i></p></div>` : '';
   return `<div class="hoja-cab nimbo-cab">${avatarNimbo(44)}<div><h3>${NIMBO.nombre}</h3><p>${NIMBO.cargo}</p></div><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
     <div class="hoja-cuerpo chat" role="log" aria-live="polite">${mensajes}${pensando}</div>
     <div class="hoja-pie nimbo-pie">
       <div class="sugerencias">${NIMBO.sugerencias.map((s) => `<button type="button" class="opcion" data-accion="preguntar" data-q="${esc(s)}">${s}</button>`).join('')}</div>
-      <form id="form-nimbo" autocomplete="off"><input type="text" id="pregunta" placeholder="Pregúntale a Nimbo" enterkeyhint="send" maxlength="140" aria-label="Tu pregunta para Nimbo"><button type="submit" class="enviar" aria-label="Enviar">${ICONOS.subir}</button></form>
+      <form id="form-nimbo" autocomplete="off"><input type="text" id="pregunta" placeholder="Pregúntale a Stormy" enterkeyhint="send" maxlength="140" aria-label="Tu pregunta para Stormy"><button type="submit" class="enviar" aria-label="Enviar">${ICONOS.subir}</button></form>
     </div>`;
 }
 
@@ -362,7 +362,7 @@ function vistaDescubrimientos() {
     ${dias >= 7 ? patronSemanal(m) : bloqueada('Patrón semanal', 7)}
     ${dias >= 14 ? factores(m) : bloqueada('Factores que influyen', 14)}
     ${dias >= 21 ? mapaCiclo(m) : bloqueada('Mapa del ciclo', 21)}
-    ${dias >= 30 ? precision(m) : bloqueada('Precisión del barómetro', 30)}
+    ${dias >= 30 ? precision(m) : bloqueada('Precisión de Stormy', 30)}
     <p class="aviso">Los patrones salen solo de vuestros registros. Con pocos días son orientativos: tómatelos con humor.</p>
   </main>`;
 }
@@ -405,7 +405,7 @@ function factores(m) {
   const cuerpo = lista.length
     ? `${lista.map((f) => `<div class="factor"><span class="${f.delta >= 0 ? 'sube' : 'baja'}">${f.delta >= 0 ? '↗' : '↘'}</span><div><strong>${esc(f.titulo)}</strong><small>${f.dias} días</small></div><b>${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))}</b></div>`).join('')}
        <p class="mini">En niveles de tiempo (de 1 a 5). Son coincidencias observadas, no causas demostradas.</p>`
-    : '<p class="nota">Añade datos extra (sueño, estrés, etiquetas) al registrar y aquí verás qué mueve el barómetro.</p>';
+    : '<p class="nota">Añade datos extra (sueño, estrés, etiquetas) al registrar y aquí verás qué mueve el clima de casa.</p>';
   return tarjeta(encabezado('factores', 'Factores que influyen', 'Diferencia frente a un día normal') + cuerpo);
 }
 
@@ -420,9 +420,9 @@ function mapaCiclo(m) {
 
 function precision(m) {
   const p = m.precision();
-  return tarjeta(`${encabezado('diana', 'Precisión del barómetro', 'Comprobada contra vuestros propios registros')}
+  return tarjeta(`${encabezado('diana', 'Precisión de Stormy', 'Comprobada contra vuestros propios registros')}
     <div class="cifras"><div><b>${pct(p.exacto)}</b><small>acierto exacto</small></div><div><b>${pct(p.cercano)}</b><small>acierta o roza</small></div><div><b>${num(p.error)}</b><small>desvío medio</small></div></div>
-    <p class="mini">Para cada uno de los ${p.dias} días, el barómetro lo predice sin mirar ese día y se compara con lo que registraste. «Roza» significa fallar por un solo nivel.</p>`);
+    <p class="mini">Para cada uno de los ${p.dias} días, Stormy lo predice sin mirar ese día y se compara con lo que registraste. «Roza» significa fallar por un solo nivel.</p>`);
 }
 
 // ---------- Ajustes ----------
@@ -466,7 +466,8 @@ function vistaAjustes() {
     ${instalar}
     <h2 class="seccion">Información</h2>
     <div class="tarjeta lista">
-      <button type="button" class="enlace neutro" data-accion="verComo">Cómo funciona el barómetro<span>${ICONOS.derecha}</span></button>
+      <button type="button" class="enlace neutro" data-accion="verHistoria">La historia de Stormy<span>${ICONOS.derecha}</span></button>
+      <button type="button" class="enlace neutro" data-accion="verComo">Cómo funciona Stormy<span>${ICONOS.derecha}</span></button>
       <button type="button" class="enlace neutro" data-accion="verPrivacidad">Privacidad y juego limpio<span>${ICONOS.derecha}</span></button>
     </div>
     <h2 class="seccion">Tus datos</h2>
@@ -484,11 +485,17 @@ function vistaAjustes() {
   </main>`;
 }
 
+const HISTORIA = [
+  ['Una nube con carácter', 'Stormy nació una tarde de domingo, en mitad de una discusión por el mando de la tele. Era una nube pequeña y se quedó con un rayo de recuerdo.'],
+  ['Su oficio', 'Desde entonces vive en casa y hace lo único que sabe: mirar el cielo. Apunta contigo qué tiempo hace cada día y busca lo que se repite.'],
+  ['Lo que no hace', 'No adivina a nadie ni toma partido. Avisa de cuándo puede tronar para que llegues con paraguas, y celebra los días de sol para que no se te pasen.'],
+  ['Su lema', 'Las tormentas pasan. Lo importante es verlas venir juntos.'],
+];
 const COMO = [
-  ['Un mes de observación', 'El barómetro necesita 30 días de partes para buscar un patrón que se repita. Antes de eso, el pronóstico es genérico y lo marca con una fiabilidad baja.'],
+  ['Un mes de observación', 'Stormy necesita 30 días de partes para buscar un patrón que se repita. Antes de eso, el pronóstico es genérico y lo marca con una fiabilidad baja.'],
   ['Qué tiene en cuenta', 'Tu media personal, el día de la semana, la fase del ciclo (si la activáis) y la inercia de los últimos días. Los datos extra explican qué factores acompañan a los días buenos y malos.'],
   ['Prudencia con pocos datos', 'Con pocos días, cada efecto se reduce a propósito para no sacar conclusiones de una casualidad. La fiabilidad sube con cada parte.'],
-  ['Cómo se mide el acierto', 'Al llegar a 30 días, el barómetro predice cada día registrado sin mirarlo y lo compara con lo que apuntaste. Esa cifra es la que ves en Descubrimientos.'],
+  ['Cómo se mide el acierto', 'Al llegar a 30 días, Stormy predice cada día registrado sin mirarlo y lo compara con lo que apuntaste. Esa cifra es la que ves en Descubrimientos.'],
   ['Lo que no es', 'No es ciencia médica ni una forma de adivinar a nadie. Es un juego para prestar más atención a quien tienes al lado. El horóscopo es solo una broma y no entra en el cálculo.'],
 ];
 const PRIVACIDAD = [
@@ -588,8 +595,8 @@ function recordatorioICS(hora) {
   const url = location.origin + location.pathname;
   const sello = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
   return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Si Cielo//Recordatorio//ES', 'CALSCALE:GREGORIAN',
-    'BEGIN:VEVENT', 'UID:parte-diario@sicielo', `DTSTAMP:${sello}`, `DTSTART:${hoy}T${h}${min}00`, 'DURATION:PT5M',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Stormy//Recordatorio//ES', 'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT', 'UID:parte-diario@stormy', `DTSTAMP:${sello}`, `DTSTART:${hoy}T${h}${min}00`, 'DURATION:PT5M',
     'RRULE:FREQ=DAILY', 'SUMMARY:¿Qué tiempo hace hoy en casa?', `DESCRIPTION:Registra el parte de hoy en 5 segundos: ${url}`, `URL:${url}`,
     'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:¿Qué tiempo hace hoy en casa?', 'TRIGGER:PT0M', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR',
@@ -615,7 +622,7 @@ const acciones = {
       duracion: a.duracion, ultimaRegla: a.sigueCiclo ? a.ultimaRegla : null, consentimiento: hoyIso(), horaAviso: a.hora, alta: true,
     });
     guardar(estado);
-    if (d.aviso) descarga('si-cielo-recordatorio.ics', 'text/calendar', recordatorioICS(a.hora));
+    if (d.aviso) descarga('stormy-recordatorio.ics', 'text/calendar', recordatorioICS(a.hora));
     ui.pestana = 'hoy';
     pinta({ arriba: true });
   },
@@ -692,6 +699,9 @@ const acciones = {
     ui.mes = nuevo;
     pinta();
   },
+  verHistoria() {
+    abreHoja({ tipo: 'texto', titulo: 'La historia de Stormy', bloques: HISTORIA });
+  },
   verComo() {
     abreHoja({ tipo: 'texto', titulo: 'Cómo funciona', bloques: COMO });
   },
@@ -699,11 +709,11 @@ const acciones = {
     abreHoja({ tipo: 'texto', titulo: 'Privacidad', bloques: PRIVACIDAD });
   },
   recordatorio() {
-    descarga('si-cielo-recordatorio.ics', 'text/calendar', recordatorioICS(estado.perfil.horaAviso));
+    descarga('stormy-recordatorio.ics', 'text/calendar', recordatorioICS(estado.perfil.horaAviso));
     avisa('Abre el archivo para añadirlo a tu calendario');
   },
   exportar() {
-    descarga(`si-cielo-${hoyIso()}.json`, 'application/json', JSON.stringify(estado, null, 2));
+    descarga(`stormy-${hoyIso()}.json`, 'application/json', JSON.stringify(estado, null, 2));
   },
   sembrar(d) {
     guardar(sembrar(estado, Number(d.n)));
