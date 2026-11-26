@@ -1192,6 +1192,11 @@ button.pieza { font: inherit; color: inherit; cursor: pointer; }
 }
 .tarjeta-horoscopo:focus-visible { outline-color: var(--foco); }
 
+.guia-de { font-size: 15px; }
+.otro-navegador { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; background: var(--relleno); font-size: 14px; font-weight: 700; }
+.otro-navegador select { min-height: 44px; padding: 8px 10px; border: 0; border-radius: 12px; background: var(--tarjeta); color: var(--texto); font: inherit; font-weight: 600; }
+a.principal { text-decoration: none; }
+
 /* ---------- Franja de la escena en «Hoy» ----------
    La pantalla «Hoy» ocupa el alto visible; la franja se queda con el hueco libre entre la última tarjeta y la barra.
    Las figuras se dibujan con el alto de la franja y nunca salen de ella, así que no tapan texto ni botones. */

@@ -48,7 +48,7 @@ test('reconoce cada tipo de pregunta', () => {
   assert.equal(tema('¿Está enfadada conmigo?', c), 'mente');
   assert.equal(tema('hola', c), 'saludo');
   assert.equal(tema('gracias', c), 'gracias');
-  assert.equal(tema('xyzzy', c), 'desconocido');
+  assert.equal(tema('xyzzy', c), 'libre-general');
 });
 
 test('no pronostica días futuros antes de tener el nivel', () => {

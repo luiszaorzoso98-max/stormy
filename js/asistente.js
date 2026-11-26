@@ -6,6 +6,7 @@ import { FASES, SEMANA, aIso, aNum, diaSemana, diasDePronostico, nivelActual, ni
 import { TIEMPOS, consejoDe, horoscopoDe } from './contenido.js';
 import { estacion, faseLunar, textoLuz } from './cielo.js';
 import { quienDe } from './datos.js';
+import { AYUDA, eligeLibre, temaLibre } from './respuestas.js';
 import { BONO_NIVEL, CHAT, COFRES, COLECCIONABLES, CURIOSIDAD, GARANTIA, RAREZAS, chatHoy, cofresGratis, destacadoDe, garantiaEn, saldo, tiendaVacia } from './tienda.js';
 
 export const NIMBO = { nombre: 'Stormy', cargo: 'Predictor de tormentas' };
@@ -60,6 +61,15 @@ export function responder(pregunta, ctx, giro = 0) {
   const visibles = diasDePronostico(dias);
 
   if (!q.trim()) return r('vacio', 'Te escucho. Pregúntame por hoy, por mañana o por cuándo proponer un plan.');
+  // Respuestas creativas cuando la pregunta no es de lo suyo: sin repetir hasta agotar cada montón.
+  const azarLibre = ctx.azar ?? (() => ((giro * 0.6180339887) % 1));
+  const libre = (tema) => r(`libre-${tema}`, eligeLibre(tema, ctx.memoria ?? {}, azarLibre));
+  // Algo serio va antes que nada, y sin bromas.
+  const temaPrevio = temaLibre(q);
+  if (temaPrevio === 'serio') return r('serio', AYUDA);
+  const conPlan = hay(' plan', ' propon', ' propong', ' cuando ');
+  // Temas ajenos (comida, deporte, la calle, ligar, trabajo, dinero) antes que las intenciones, salvo que se pida un plan.
+  if (['ia', 'chiste', 'insulto'].includes(temaPrevio) || (temaPrevio !== 'general' && !conPlan)) return libre(temaPrevio);
 
   // --- La tienda: rayos, colección, cofres y garantías. Todo es de adorno; los rayos no tocan el pronóstico. ---
   const tienda = ctx.tienda ?? tiendaVacia();
@@ -307,11 +317,8 @@ export function responder(pregunta, ctx, giro = 0) {
     return r('saludo', `¡Buenas! Aquí Stormy, predictor de tormentas. Pregúntame por hoy, por mañana o por cuándo proponer ese plan.`);
   }
 
-  // --- No lo ha entendido ---
-  return r('desconocido', elige([
-    'Esa nube no la tengo catalogada. Prueba con: «¿qué tal hoy?», «¿y mañana?», «¿cuándo propongo un plan?» o «¿qué influye en el ambiente de casa?».',
-    'Ahí me pillas fuera de cobertura. Yo entiendo de hoy, mañana, la semana, lo que influye en casa, los niveles y de si acierto o no.',
-  ]));
+  // --- No lo ha entendido: respuesta creativa según el tema ---
+  return libre(temaPrevio);
 }
 
 /**

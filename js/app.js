@@ -16,6 +16,7 @@ import {
 } from './tienda.js';
 import { capacidad, muestraAviso, pidePermiso, recogePendientes } from './avisos.js';
 import { faseLunar } from './cielo.js';
+import { GUIAS, ORDEN_GUIAS, detectaNavegador, enlaceChrome } from './navegador.js';
 import {
   PARENTESCOS, RELACIONES, aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
   extrasDe, fusionaRespuestas, guardar, muestrasDe, rachaDe, rayosDeEstado, rayosDisponibles, reglasDe, totalExtras,
@@ -159,10 +160,13 @@ function anillo(progreso, dentro, lado = 40, grosor = 4) {
 // ---------- Bienvenida ----------
 
 const enPantallaDeInicio = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-const esAndroid = () => /android/i.test(navigator.userAgent);
+// Dispositivo y navegador (ver navegador.js). ?ua=… solo para probar las guías con otro navegador simulado.
+const UA = new URLSearchParams(location.search).get('ua') || navigator.userAgent;
+const nav = () => detectaNavegador(UA, { maxTouchPoints: new URLSearchParams(location.search).get('ua') ? 0 : navigator.maxTouchPoints, standalone: enPantallaDeInicio() });
+const esIOS = () => nav().plataforma === 'ios';
+const esAndroid = () => nav().plataforma === 'android';
 // Navegadores incrustados en otras apps: en iPhone no dejan añadir la web a la pantalla de inicio.
-const enAppAjena = () => /FBAN|FBAV|FB_IAB|Instagram|Line\/|WhatsApp|Twitter|TikTok|musical_ly|LinkedInApp|Snapchat|Pinterest|GSA\/|MicroMessenger|Telegram/i.test(navigator.userAgent);
+const enAppAjena = () => !!nav().app;
 
 const pasosAlta = () => [
   'presentacion', 'portada', ...(enPantallaDeInicio() || NATIVO ? [] : ['instalar']), 'juego', 'quien',
@@ -209,28 +213,62 @@ const PASOS_IOS = [
   ['Toca «Añadir»', 'Arriba a la derecha. Stormy aparece con su icono, como una app más: ábrela desde ahí.'],
 ];
 
-function guiaInstalar() {
-  if (enAppAjena()) {
-    return tarjeta(`<div class="fila"><span class="acento">${ICONOS.compartir}</span><div><strong>Ábrelo en ${esIOS() ? 'Safari' : 'el navegador'}</strong>
-      <p>Estás viendo Stormy dentro de otra app y desde aquí no se puede instalar. Copia el enlace, abre ${esIOS() ? 'Safari' : 'el navegador'} y pégalo en la barra de direcciones.</p></div></div>
-      <button type="button" class="principal suave con-margen" data-accion="copiarEnlace">${ICONOS.copiar}<span>Copiar enlace</span></button>`, 'cristal');
+// Dibujo genérico de un paso: barra del navegador con el botón marcado, un menú con la opción marcada o la confirmación.
+const ICO_PUNTOS = '<circle cx="9" cy="3" r="1.6" fill="currentColor"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><circle cx="9" cy="15" r="1.6" fill="currentColor"/>';
+const ICO_HAMB = '<path d="M2 4h14M2 9h14M2 14h14"/>';
+const ICO_MENU = '<circle cx="3" cy="9" r="1.6" fill="currentColor"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><circle cx="15" cy="9" r="1.6" fill="currentColor"/>';
+const ICO_INSTALAR = '<rect x="1.5" y="2" width="15" height="11" rx="2"/><path d="M9 5v6M6 8.5L9 11l3-2.5M6 16h6"/>';
+const ICONO_BARRA = { compartir: ICO_COMPARTIR, puntos: ICO_PUNTOS, hamburguesa: ICO_HAMB, menu: ICO_MENU, instalar: ICO_INSTALAR };
+function mockPaso(d) {
+  if (d.menu) return `<svg class="mock" viewBox="0 0 280 130" aria-hidden="true">${d.menu.map((t, i) => filaHoja(8 + i * 40, t, i === d.marca ? ICO_MAS : '', i === d.marca)).join('')}</svg>`;
+  if (d.confirma) {
+    return `<svg class="mock" viewBox="0 0 280 100" aria-hidden="true"><rect x="10" y="10" width="260" height="80" rx="14" fill="var(--relleno)"/>
+      <rect x="22" y="26" width="48" height="48" rx="12" fill="#2E2466"/><path d="M33 56a6 6 0 0 1 0-12 9 9 0 0 1 17-2 7 7 0 0 1 2 14z" fill="#fff"/>
+      <text x="82" y="46" class="mock-txt">Stormy</text><text x="82" y="64" class="mock-txt tenue">App web</text>
+      <rect x="182" y="34" width="76" height="32" rx="16" fill="#2F6BFF"/><text x="220" y="55" class="mock-txt" text-anchor="middle" fill="#fff" style="fill:#fff">${d.confirma}</text>${resalte(178, 30, 84, 40, 20)}</svg>`;
   }
-  if (esIOS()) {
+  const x = d.lado === 'izquierda' ? 26 : d.lado === 'centro' ? 131 : 236;
+  const y = d.arriba ? 14 : 66;
+  return `<svg class="mock" viewBox="0 0 280 ${d.arriba ? 50 : 100}" aria-hidden="true"><rect x="10" y="${d.arriba ? 6 : 58}" width="260" height="36" rx="18" fill="var(--relleno)"/>
+    <text x="${d.lado === 'izquierda' ? 150 : 110}" y="${y + 15}" class="mock-txt tenue" text-anchor="middle">stormy</text>
+    <g transform="translate(${x} ${y})" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">${ICONO_BARRA[d.barra]}</g>
+    ${resalte(x - 9, y - 7, 36, 32, 12)}${d.arriba ? '' : '<rect x="60" y="14" width="160" height="30" rx="8" fill="var(--relleno)" opacity=".5"/>'}</svg>`;
+}
+
+/** Qué guía enseñar: la elegida en «¿Usas otro navegador?» o la del navegador detectado. */
+const guiaActual = () => ui.guiaElegida ?? nav().guia;
+
+function pasosGuia(clave) {
+  if (clave === 'safari-ios') {
     return `<ol class="pasos-instalar">${PASOS_IOS.map(([t, x], i) => `<li class="tarjeta cristal"><div class="paso-cab"><span class="num">${i + 1}</span><div><strong>${t}</strong><p>${x}</p></div></div>
       <svg class="mock" viewBox="0 0 280 ${i === 1 ? 100 : 130}" role="img" aria-label="Paso ${i + 1}: ${t}">${MOCKS_IOS[i]}</svg></li>`).join('')}</ol>`;
   }
-  if (ui.instalar) {
-    return tarjeta(`<button type="button" class="principal" data-accion="instalar">${ICONOS.mas}<span>Instalar Stormy</span></button>
-      <p class="nota">Un toque y queda en tu pantalla de inicio.</p>`, 'cristal');
+  if (clave === 'inapp') {
+    const n = nav();
+    const android = n.plataforma === 'android' || (ui.guiaElegida === 'inapp' && n.plataforma !== 'ios');
+    return tarjeta(`<div class="fila"><span class="acento">${ICONOS.compartir}</span><div><strong>Ábrelo en ${android ? 'Chrome' : 'Safari'}</strong>
+      <p>Estás viendo Stormy dentro de ${n.app ?? 'otra app'} y desde aquí no se puede instalar. ${android ? 'Toca el botón para abrirlo en Chrome, o copia el enlace y pégalo allí.' : 'Copia el enlace, abre Safari y pégalo en la barra de direcciones. También puedes tocar ⋯ o el icono de compartir de la app y elegir «Abrir en Safari».'}</p></div></div>
+      ${android ? `<a class="principal con-margen" href="${esc(enlaceChrome(location.origin + location.pathname))}">${ICONOS.subir}<span>Abrir en Chrome</span></a>` : ''}
+      <button type="button" class="principal suave con-margen" data-accion="copiarEnlace">${ICONOS.copiar}<span>Copiar enlace</span></button>`, 'cristal');
   }
-  return tarjeta(`<p class="nota sin-margen">${esAndroid()
-    ? 'En el menú del navegador (⋮), elige «Instalar aplicación» o «Añadir a pantalla de inicio».'
-    : 'Abre este enlace en el móvil para instalar Stormy en la pantalla de inicio. En el ordenador, el navegador puede ofrecer «Instalar» en la barra de direcciones.'}</p>`, 'cristal');
+  const g = GUIAS[clave];
+  const boton = clave === 'android-chrome' && ui.instalar && !ui.guiaElegida
+    ? `<div class="tarjeta cristal"><button type="button" class="principal" data-accion="instalar">${ICONOS.mas}<span>Instalar Stormy</span></button><p class="nota">Un toque y queda en tu pantalla de inicio. Si no sale, sigue los pasos de abajo.</p></div>` : '';
+  return `${boton}<ol class="pasos-instalar">${g.pasos.map(([t, x, d], i) => `<li class="tarjeta cristal"><div class="paso-cab"><span class="num">${i + 1}</span><div><strong>${t}</strong><p>${x}</p></div></div>${mockPaso(d)}</li>`).join('')}</ol>`;
+}
+
+function guiaInstalar() {
+  const clave = guiaActual();
+  const detectada = nav().guia;
+  const otras = ORDEN_GUIAS.map(([grupo, claves]) => `<optgroup label="${grupo}">${claves.map((c) => `<option value="${c}" ${c === clave ? 'selected' : ''}>${GUIAS[c].nombre}${c === detectada ? ' (el tuyo)' : ''}</option>`).join('')}</optgroup>`).join('');
+  return `<p class="guia-de">Pasos para <strong>${GUIAS[clave].nombre}</strong></p>
+    ${pasosGuia(clave)}
+    <label class="otro-navegador"><span>¿Usas otro navegador?</span><select data-modelo="ui.guia" aria-label="Elegir navegador">${otras}</select></label>`;
 }
 
 /** Móvil sin instalar y fuera de la app nativa: es cuando hay que insistir en instalar. */
 const faltaInstalar = () => !NATIVO && !enPantallaDeInicio() && (esIOS() || esAndroid());
-const POR_QUE_INSTALAR = 'Sin instalarla no hay avisos, y Safari puede borrar tus partes si pasas unos días sin abrirla.';
+const POR_QUE_INSTALAR = 'Sin instalarla no hay avisos, y el navegador puede borrar tus partes si pasas unos días sin abrirla.';
 
 function bienvenida() {
   const a = ui.alta;
@@ -1010,7 +1048,10 @@ function preguntaANimbo(texto) {
   if (teniaFoco) $('#pregunta')?.focus();
   setTimeout(() => {
     const turno = ui.chat.filter((m) => m.de === 'yo').length;
-    ui.chat.push({ de: 'nimbo', texto: conEstilo(responder(pregunta, contextoNimbo(), turno).texto, equipadoDe('personalidad')) });
+    ui.memoriaChat ??= {};
+    const respuesta = responder(pregunta, { ...contextoNimbo(), memoria: ui.memoriaChat }, turno);
+    // Lo serio va tal cual: sin coletilla de personalidad.
+    ui.chat.push({ de: 'nimbo', texto: respuesta.tema === 'serio' ? respuesta.texto : conEstilo(respuesta.texto, equipadoDe('personalidad')) });
     // Preguntar da rayos: +5 la primera del día y, a veces, una sorpresa (tope diario).
     const premio = premioChat(tiendaDe(), hoyIso());
     if (premio.cantidad) {
@@ -2320,6 +2361,12 @@ function alCambiar(ev) {
   const casilla = el.type === 'checkbox';
   const valor = casilla ? el.checked : el.value;
 
+  if (raiz === 'ui' && campo === 'guia') {
+    ui.guiaElegida = GUIAS[valor] ? valor : null;
+    if (ui.hoja) pintaHoja();
+    else pinta();
+    return;
+  }
   if (raiz === 'alta') {
     if (!casilla && !valor && el.type !== 'text') return;
     ui.alta[campo] = valor;
