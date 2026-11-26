@@ -2,18 +2,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Motor, aIso, aNum } from '../js/motor.js';
-import { responder, saludo } from '../js/asistente.js';
+import { consejoDe } from '../js/contenido.js';
+import { reaccion, responder, saludo, sugerenciasDe } from '../js/asistente.js';
 
 const HOY = '2026-11-26'; // jueves
 const dia = (i) => aIso(aNum(HOY) + i);
 
-function contexto(dias, { ciclo = false, conHoy = null, nombre = 'Ana', nacimiento = null } = {}) {
+function contexto(dias, { ciclo = false, conHoy = null, apodo = 'Ana', relacion = 'pareja', parentesco = null, nacimiento = null } = {}) {
   const entradas = {};
   for (let i = dias; i >= 1; i--) {
     entradas[dia(-i)] = { animo: 3 + ((i % 3) - 1), sueno: (i % 3) + 1, estres: ((i + 1) % 3) + 1, etiquetas: i % 2 ? ['Plan juntos'] : [], nota: '', regla: false };
   }
   if (conHoy) entradas[HOY] = { animo: conHoy, sueno: null, estres: null, etiquetas: [], nota: '', regla: false };
-  const perfil = { nombre, nacimiento, sigueCiclo: ciclo, duracion: 28, ultimaRegla: ciclo ? dia(-10) : null };
+  const perfil = { apodo, miApodo: '', relacion, parentesco, nacimiento, sigueCiclo: ciclo, duracion: 28, ultimaRegla: ciclo ? dia(-10) : null };
   const motor = new Motor({
     muestras: Object.entries(entradas).map(([d, e]) => ({ dia: d, ...e })),
     reglas: ciclo ? [dia(-10)] : [], duracion: 28, sigueCiclo: ciclo, hoy: HOY,
@@ -69,13 +70,53 @@ test('con el parte de hoy registrado dice si acertó', () => {
   assert.match(t, /Lo clavé|lo rocé|sin paraguas/);
 });
 
-test('usa el nombre de la pareja y no inventa datos que no tiene', () => {
-  assert.match(responder('¿Qué tal hoy?', contexto(10, { nombre: 'Lucía' })).texto, /con Lucía/);
-  assert.match(responder('¿Qué tal hoy?', contexto(10, { nombre: '' })).texto, /con tu pareja/);
+test('usa el apodo y no inventa datos que no tiene', () => {
+  assert.match(responder('¿Está enfadada conmigo?', contexto(10, { apodo: 'Lucía' })).texto, /con Lucía/);
   assert.match(responder('¿En qué fase está?', contexto(10)).texto, /no está activado/);
-  assert.match(responder('¿Su horóscopo?', contexto(10)).texto, /No tengo su fecha/);
+  assert.match(responder('¿Su horóscopo?', contexto(10)).texto, /No tengo fecha de nacimiento/);
   assert.match(responder('¿Qué le afecta?', contexto(5)).texto, /necesito 14 días y llevo 5/);
   assert.match(responder('¿Aciertas mucho?', contexto(10)).texto, /Aún no presumo/);
+});
+
+test('sin apodo no presupone relación ni género', () => {
+  const sinApodo = contexto(20, { apodo: '' });
+  const preguntas = ['¿Está enfadada conmigo?', '¿Qué le pasa?', '¿Qué tal hoy?', '¿Y mañana?', '¿Qué le afecta?', 'hola', '¿Cuándo propongo un plan?'];
+  for (const [i, q] of preguntas.entries()) {
+    const t = responder(q, sinApodo, i).texto;
+    assert.doesNotMatch(t, /tu pareja|\bella\b|\bél\b|tu novi[ao]|tu mujer|tu marido/i, q);
+  }
+  assert.match(responder('¿Está enfadada conmigo?', sinApodo).texto, /quien vive contigo/);
+  // Con familia y sin apodo, se usa el parentesco elegido.
+  assert.match(responder('¿Me odia?', contexto(10, { apodo: '', relacion: 'familia', parentesco: 'hermana' })).texto, /tu hermana/);
+});
+
+test('consejos y saludo se adaptan a la relación', () => {
+  // Día 5 de enero: índice 0 en las dos listas, y para soleado los textos de pareja y de convivencia difieren.
+  const iso = '2026-01-05';
+  assert.notEqual(consejoDe(5, iso, 'pareja'), consejoDe(5, iso, 'familia'));
+  assert.equal(consejoDe(5, iso, 'amigo'), consejoDe(5, iso, 'familia'));
+  const conMote = contexto(3);
+  conMote.perfil.miApodo = 'Luis';
+  assert.match(saludo(conMote), /^¡Buenas, Luis!/);
+  assert.match(saludo(contexto(3)), /^¡Buenas! /);
+});
+
+test('sugerencias: la del ciclo solo con el ciclo activado', () => {
+  assert.ok(sugerenciasDe({ sigueCiclo: true }).includes('¿Cómo funciona el ciclo menstrual?'));
+  assert.ok(!sugerenciasDe({ sigueCiclo: false }).includes('¿Cómo funciona el ciclo menstrual?'));
+  for (const s of ['¿Qué dice el horóscopo de hoy?', '¿Qué influye en el ambiente de casa?']) assert.ok(sugerenciasDe({}).includes(s));
+  const c = contexto(20, { ciclo: true });
+  assert.equal(tema('¿Cómo funciona el ciclo menstrual?', c), 'ciclo-info');
+  assert.equal(tema('¿Qué influye en el ambiente de casa?', c), 'factores');
+  assert.equal(tema('¿Qué dice el horóscopo de hoy?', c), 'horoscopo');
+  assert.equal(tema('¿En qué fase está la luna?', c), 'cielo');
+});
+
+test('reacción al registrar: una frase para cada tiempo', () => {
+  for (const t of [1, 2, 3, 4, 5]) {
+    assert.ok(reaccion(t, 0).length > 10);
+    assert.notEqual(reaccion(t, 0), reaccion(t, 1));
+  }
 });
 
 test('la precisión cita cifras reales con el mes completo', () => {

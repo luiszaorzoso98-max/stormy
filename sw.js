@@ -1,9 +1,9 @@
 // Servicio de trabajo: guarda la app en el dispositivo para que funcione sin conexión.
 // Al publicar una versión nueva, cambia VERSION para que los dispositivos se actualicen.
-const VERSION = 'stormy-1.4.0';
+const VERSION = 'stormy-2.0.0';
 const ARCHIVOS = [
   './', './index.html', './styles.css', './manifest.webmanifest',
-  './js/app.js', './js/motor.js', './js/contenido.js', './js/datos.js', './js/asistente.js', './js/avisos.js',
+  './js/app.js', './js/motor.js', './js/contenido.js', './js/datos.js', './js/asistente.js', './js/avisos.js', './js/cielo.js',
   './iconos/icono-180.png', './iconos/icono-192.png', './iconos/icono-512.png',
 ];
 
@@ -99,7 +99,7 @@ self.addEventListener('push', (ev) => {
     /* aviso sin datos */
   }
   ev.waitUntil(
-    self.registration.showNotification(datos.titulo ?? '¿Qué tiempo hace hoy en casa?', {
+    self.registration.showNotification(datos.titulo ?? '¿Qué tiempo ha hecho hoy en casa?', {
       body: datos.cuerpo ?? 'Elige el parte de hoy.',
       tag: 'parte-diario',
       icon: 'iconos/icono-192.png',

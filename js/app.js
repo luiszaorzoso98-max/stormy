@@ -1,30 +1,47 @@
 // Stormy — aplicación web instalable. Sin dependencias ni servidor: todo se calcula y se guarda en el dispositivo.
 import {
-  Motor, NIVELES, OBJETIVO, SEMANA, aIso, aNum, diaSemana, diasDePronostico, hoyIso,
-  nivelActual, nivelSiguiente, racha, tiempoDe,
+  Motor, FASES, NIVELES, RAYOS, SEMANA, estadoHoy, fase as faseDe, marcaRegla, aIso, aNum, diaSemana, diasDePronostico, hoyIso,
+  nivelActual, nivelSiguiente, premioDe, racha, tiempoDe,
 } from './motor.js';
 import {
-  APP, ETIQUETAS, ICONOS, INSIGNIAS, ORDEN_TIEMPOS, TIEMPOS, avatarNimbo, consejoDe, ficha, fraseHoroscopo, iconoTiempo, signo,
+  APP, AVISO_CICLO, CADA_PERSONA, ENLACE_LUNA, ETIQUETAS, FASES_INFO, FICHAS_CICLO, HOROSCOPO_DETRAS, HORMONAS, ICONOS, INSIGNIAS,
+  ORDEN_TIEMPOS, TIEMPOS, avatarNimbo, consejoDe, ficha, horoscopoDe, iconoTiempo, lunaSVG, nubeSuelta, signo, solSuelto, stormyPortada,
 } from './contenido.js';
-import { NIMBO, responder, saludo } from './asistente.js';
-import { capacidad, muestraAviso, recogePendientes } from './avisos.js';
+import { NIMBO, reaccion, responder, saludo, sugerenciasDe } from './asistente.js';
+import { capacidad, muestraAviso, pidePermiso, recogePendientes } from './avisos.js';
+import { faseLunar } from './cielo.js';
 import {
-  borrarTodo, cargar, extrasDe, guardar, muestrasDe, nombreDe, reglasDe, sembrar, totalExtras,
+  PARENTESCOS, RELACIONES, aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
+  extrasDe, guardar, muestrasDe, rayosDeEstado, reglasDe, totalExtras,
 } from './datos.js';
 
 // ---------- Estado ----------
 
-let estado = cargar();
+let real = cargar();
+// Modo demostración: un estado de ejemplo que solo vive en memoria. Los datos reales no se tocan ni se guardan encima.
+let demo = null;
+const E = () => demo ?? real;
+const salva = () => (demo ? false : guardar(real));
+
 const ui = {
   pestana: 'hoy',
   paso: 0,
+  pasoPintado: null,
   mes: hoyIso().slice(0, 7),
   hoja: null,
   borrador: null,
-  alta: { consiente: false, nombre: '', conNacimiento: false, nacimiento: '1992-06-15', sigueCiclo: false, ultimaRegla: hoyIso(), duracion: 28, hora: '21:30' },
+  alta: {
+    consiente: false, relacion: null, parentesco: null, apodo: '', miApodo: '', conNacimiento: false, nacimiento: '1992-06-15',
+    sigueCiclo: false, ultimaRegla: hoyIso(), duracion: 28, hora: '21:30',
+  },
   instalar: null,
   chat: [],
   pensando: false,
+  recorrido: null, // paso del recorrido guiado, o null si no está en marcha
+  recien: null, // último parte apuntado, para animar el calendario
+  nivelPendiente: null,
+  copiaPendiente: null,
+  muestra: null,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -32,30 +49,43 @@ const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const mayus = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const num = (v, d = 1) => v.toFixed(d).replace('.', ',');
 const pct = (v) => `${Math.round(v * 100)} %`;
+const faltan = (n) => (n === 1 ? 'Falta 1 día' : `Faltan ${n} días`);
 const fecha = (iso, opciones) => {
   const [a, m, d] = iso.split('-').map(Number);
   return new Intl.DateTimeFormat('es-ES', { ...opciones, timeZone: 'UTC' }).format(new Date(Date.UTC(a, m - 1, d)));
 };
 const fechaLarga = (iso) => mayus(fecha(iso, { weekday: 'long', day: 'numeric', month: 'long' }));
 
-const motor = () =>
+const motorDe = (st) =>
   new Motor({
-    muestras: muestrasDe(estado), reglas: reglasDe(estado), duracion: estado.perfil.duracion,
-    sigueCiclo: estado.perfil.sigueCiclo, hoy: hoyIso(),
+    muestras: muestrasDe(st), reglas: reglasDe(st), duracion: st.perfil.duracion, sigueCiclo: st.perfil.sigueCiclo, hoy: hoyIso(),
   });
-const diasRegistrados = () => Object.keys(estado.entradas).length;
+const motor = () => motorDe(E());
+const diasRegistrados = () => Object.keys(E().entradas).length;
+/** Estado de ejemplo para las vistas «de ejemplo» de lo que aún está bloqueado. */
+const muestra = () => (ui.muestra ??= ejemplo(60, { ...E().perfil, sigueCiclo: true }));
+const stormyEspecial = () => diasRegistrados() >= NIVELES[NIVELES.length - 1].dias;
 
 // ---------- Arranque con parámetros de prueba: ?demo=30&pestana=descubrimientos&hoja=registro&paso=2&reiniciar=1 ----------
 
 {
   const q = new URLSearchParams(location.search);
-  if (q.has('reiniciar')) estado = borrarTodo();
-  if (q.has('demo')) guardar(sembrar(estado, Number(q.get('demo')) || 0));
+  if (q.has('reiniciar')) {
+    real = borrarTodo();
+    // Se quita de la dirección para que recargar la página no vuelva a borrar.
+    q.delete('reiniciar');
+    history.replaceState(null, '', location.pathname + (q.size ? `?${q}` : ''));
+  }
+  // ?demo=N abre el modo demostración con N días de ejemplo; no escribe nada en el almacenamiento.
+  if (q.has('demo')) demo = ejemplo(Number.isFinite(Number(q.get('demo'))) ? Number(q.get('demo')) : 30, real.perfil);
+  // ?demo=30&cielo=5: en el modo demostración, el parte de hoy de ejemplo con ese tiempo (solo en memoria).
+  if (demo && /^[1-5]$/.test(q.get('cielo') ?? '')) demo.entradas[hoyIso()] = { ...entradaVacia(), animo: Number(q.get('cielo')) };
   if (q.has('pestana')) ui.pestana = q.get('pestana');
   if (q.has('paso')) ui.paso = Number(q.get('paso')) || 0;
-  // Se quitan de la dirección para que recargar la página no vuelva a borrar ni a sembrar datos.
-  if (q.has('reiniciar') || q.has('demo')) history.replaceState(null, '', location.pathname);
-  if (q.has('hoja') && estado.perfil.alta) setTimeout(() => acciones[{ registro: 'abrirRegistro', niveles: 'abrirNiveles', nimbo: 'abrirNimbo' }[q.get('hoja')] ?? 'abrirRegistro']({}), 0);
+  if (q.has('hoja') && E().perfil.alta) {
+    const accion = { registro: 'abrirRegistro', niveles: 'abrirNiveles', nimbo: 'abrirNimbo' }[q.get('hoja')] ?? 'abrirRegistro';
+    setTimeout(() => acciones[accion]({}), 0);
+  }
 }
 
 // ---------- Piezas comunes ----------
@@ -65,65 +95,139 @@ const encabezado = (icono, titulo, sub) =>
   `<header class="encabezado"><span class="marca">${ICONOS[icono]}</span><div><h3>${titulo}</h3><p>${sub}</p></div></header>`;
 const interruptor = (modelo, activo, etiqueta) =>
   `<label class="interruptor"><span>${etiqueta}</span><input type="checkbox" role="switch" data-modelo="${modelo}" ${activo ? 'checked' : ''}><i aria-hidden="true"></i></label>`;
+const paso = (modelo) =>
+  `<span class="pasos"><button type="button" data-accion="pasoNumero" data-modelo="${modelo}" data-d="-1" aria-label="Un día menos">−</button><button type="button" data-accion="pasoNumero" data-modelo="${modelo}" data-d="1" aria-label="Un día más">+</button></span>`;
+/** Botones de elección única ligados a un campo: alta.*, perfil.* o borrador.* */
+const eleccion = (modelo, actual, opciones, clase = 'triple') =>
+  `<div class="${clase}">${opciones
+    .map(([v, nombre]) => `<button type="button" class="opcion ${actual === v ? 'on' : ''}" aria-pressed="${actual === v}" data-accion="elige" data-modelo="${modelo}" data-v="${v}">${nombre}</button>`)
+    .join('')}</div>`;
+const fuentes = (lista) =>
+  `<p class="fuentes">Fuentes: ${lista.map(([nombre, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(nombre)}</a>`).join(' · ')}</p>`;
 
-function barraNiveles(dias) {
-  const progreso = Math.min(1, dias / OBJETIVO) * 100;
-  const marcas = NIVELES.slice(1)
-    .map((n) => `<b class="${dias >= n.dias ? 'hecha' : ''}" style="left:calc(${(n.dias / OBJETIVO) * 100}% - 9px)"></b>`)
-    .join('');
-  return `<div class="barra-niveles" role="img" aria-label="Progreso: ${dias} de 30 días"><i style="width:max(12px,${progreso}%)"></i>${marcas}</div>`;
+/** Anillo de progreso con algo dentro. `progreso` va de 0 a 1. */
+function anillo(progreso, dentro, lado = 40, grosor = 4) {
+  const r = (lado - grosor) / 2;
+  const c = 2 * Math.PI * r;
+  const p = Math.min(1, Math.max(0, progreso));
+  const circulo = (clase, extra = '') =>
+    `<circle class="${clase}" cx="${lado / 2}" cy="${lado / 2}" r="${r}" fill="none" stroke-width="${grosor}" ${extra}/>`;
+  return `<span class="anillo ${p >= 1 ? 'lleno' : ''}" style="width:${lado}px;height:${lado}px"><svg viewBox="0 0 ${lado} ${lado}" width="${lado}" height="${lado}" aria-hidden="true">${circulo('pista')}${
+    p > 0 ? circulo('avance', `stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c * (1 - p)).toFixed(1)}" transform="rotate(-90 ${lado / 2} ${lado / 2})"`) : ''
+  }</svg><span class="dentro">${dentro}</span></span>`;
 }
 
 // ---------- Bienvenida ----------
 
-const PASOS = 5;
+const enPantallaDeInicio = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const esAndroid = () => /android/i.test(navigator.userAgent);
+// Navegadores incrustados en otras apps: en iPhone no dejan añadir la web a la pantalla de inicio.
+const enAppAjena = () => /FBAN|FBAV|FB_IAB|Instagram|Line\/|WhatsApp|Twitter|TikTok|musical_ly|LinkedInApp|Snapchat|Pinterest|GSA\/|MicroMessenger|Telegram/i.test(navigator.userAgent);
+
+const pasosAlta = () => [
+  'presentacion', 'portada', ...(enPantallaDeInicio() ? [] : ['instalar']), 'juego', 'quien',
+  ...(ui.alta.relacion === 'pareja' ? ['ciclo'] : []), 'aviso',
+];
+
+function guiaInstalar() {
+  if (esIOS() && enAppAjena()) {
+    return tarjeta(`<div class="fila"><span class="acento">${ICONOS.compartir}</span><div><strong>Ábrelo en Safari</strong>
+      <p>Estás viendo Stormy dentro de otra app y desde aquí no se puede instalar. Copia el enlace, abre Safari y pégalo en la barra de direcciones.</p></div></div>
+      <button type="button" class="principal suave" data-accion="copiarEnlace">${ICONOS.copiar}<span>Copiar enlace</span></button>`, 'cristal');
+  }
+  if (esIOS()) {
+    const pasoIOS = (n, icono, titulo, texto) =>
+      `<li><span class="num">${n}</span><span class="dibujo">${ICONOS[icono]}</span><div><strong>${titulo}</strong><p>${texto}</p></div></li>`;
+    return tarjeta(`<ol class="pasos-ios">
+      ${pasoIOS(1, 'compartir', 'Toca Compartir', 'El cuadrado con la flecha, en la barra de Safari.')}
+      ${pasoIOS(2, 'mas', '«Añadir a pantalla de inicio»', 'Desliza la lista hacia abajo hasta encontrarlo.')}
+      ${pasoIOS(3, 'visto', 'Toca «Añadir»', 'Stormy aparece con su icono, como una app más.')}
+    </ol>`, 'cristal');
+  }
+  if (ui.instalar) {
+    return tarjeta(`<button type="button" class="principal" data-accion="instalar">${ICONOS.mas}<span>Instalar Stormy</span></button>
+      <p class="nota">Un toque y queda en tu pantalla de inicio.</p>`, 'cristal');
+  }
+  return tarjeta(`<p class="nota sin-margen">${esAndroid()
+    ? 'En el menú del navegador (⋮), elige «Instalar aplicación» o «Añadir a pantalla de inicio».'
+    : 'Abre este enlace en el móvil para instalar Stormy en la pantalla de inicio. En el ordenador, el navegador puede ofrecer «Instalar» en la barra de direcciones.'}</p>`, 'cristal');
+}
 
 function bienvenida() {
   const a = ui.alta;
   const fila = (icono, titulo, texto) =>
     `<div class="fila"><span class="acento">${ICONOS[icono]}</span><div><strong>${titulo}</strong><p>${texto}</p></div></div>`;
   const titulo = (t, sub) => `<div class="titulo-paso"><h1>${t}</h1><p>${sub}</p></div>`;
-  const pasos = [
-    () => `<div class="portada">
-        ${iconoTiempo(4, 132)}
+  const pasos = {
+    presentacion: () => `<div class="presentacion">
+        ${stormyPortada(120)}
+        <p class="cita">«${APP.presentacion}»</p>
+        <p class="explica">${APP.queHace}</p>
+        <div class="chips-intro"><span>${ICONOS.toque}Un toque al día</span><span>${ICONOS.calendario}En 7 días, primeros patrones</span></div>
+      </div>`,
+    portada: () => `<div class="portada">
+        ${stormyPortada(132)}
         <h1>${APP.nombre}</h1>
         <p class="lema">${APP.lema}</p>
       </div>
       ${tarjeta(
-        fila('toque', 'Cada día, un toque', 'Apunta qué tiempo hace en casa. Son 5 segundos.') +
-        fila('calendario', 'En 30 días aprende', 'Busca patrones que se repiten cada mes.') +
-        fila('destello', 'Pronóstico con humor', 'Previsión y consejos para llegar a casa con paraguas… o con planes.'),
+        fila('toque', 'Cada día, un toque', 'Apunta qué tiempo ha hecho en casa. Son 5 segundos.') +
+        fila('calendario', 'Resultados desde la primera semana', 'A los 7 días ya ves los primeros patrones. Stormy los estudia y pronostica con criterio.') +
+        fila('destello', 'Pronostico con humor', 'Previsión y consejos para llegar a casa con paraguas… o con planes.'),
         'cristal filas')}`,
-    () => `${titulo('Juego limpio', 'Antes de empezar, lo más importante.')}
+    instalar: () => `${titulo('Stormy, a un toque', 'Instálala en la pantalla de inicio: se abre como una app y tus partes quedan mejor guardados.')}
+      ${guiaInstalar()}`,
+    juego: () => `${titulo('Juego limpio', 'Antes de empezar, lo más importante.')}
+      <div class="escena ${a.consiente ? 'on' : ''}" aria-hidden="true"><span class="escena-sol">${solSuelto(84)}</span><span class="escena-nube">${nubeSuelta(96)}</span></div>
+      ${a.consiente ? '<p class="acierto" role="status">Primer acierto del pronóstico: compartirlo ha sido buena idea.</p>' : ''}
       ${tarjeta(
-        fila('personas', 'Son datos suyos', 'Vas a apuntar cosas sobre el ánimo de tu pareja. Cuéntaselo y enséñale la app.') +
-        fila('movil', 'Se quedan en este dispositivo', 'Sin cuentas, sin servidores y sin publicidad.') +
+        fila('personas', 'Es cosa de dos', 'Vais a apuntar cómo está el ambiente en casa. Enseñadle la app y decidid juntos si os apetece.') +
+        fila('movil', 'Se queda en este dispositivo', 'Sin cuentas, sin servidores y sin publicidad.') +
         fila('mascaras', 'Es un juego', 'Entretenimiento para entenderos mejor. No es consejo médico ni psicológico.'),
         'cristal filas')}
-      ${tarjeta(interruptor('alta.consiente', a.consiente, '<strong>Mi pareja lo sabe y le parece bien</strong>'), 'cristal')}`,
-    () => `${titulo('Tu pareja', 'Para que el parte tenga nombre propio.')}
-      ${tarjeta(`<label class="campo"><span>¿Cómo se llama?</span>
-        <input type="text" data-modelo="alta.nombre" value="${esc(a.nombre)}" placeholder="Nombre" autocomplete="off" autocapitalize="words" enterkeyhint="done" maxlength="30"></label>`, 'cristal')}
-      ${tarjeta(`${interruptor('alta.conNacimiento', a.conNacimiento, 'Añadir fecha de nacimiento')}
+      ${tarjeta(interruptor('alta.consiente', a.consiente, '<strong>Lo hemos hablado y nos apetece a los dos</strong>'), 'cristal')}`,
+    quien: () => `${titulo('¿Con quién vives?', 'Para que el parte tenga nombre propio.')}
+      ${tarjeta(`${eleccion('alta.relacion', a.relacion, RELACIONES)}
+        ${a.relacion === 'familia' ? `<p class="sobre con-margen">¿Quién es?</p>${eleccion('alta.parentesco', a.parentesco, PARENTESCOS, 'chips')}` : ''}
+        ${a.relacion && a.relacion !== 'pareja' ? '<p class="nota">El ciclo menstrual se puede añadir más adelante en Ajustes, si lo veis necesario.</p>' : ''}`, 'cristal')}
+      ${tarjeta(`<label class="campo"><span>¿Cómo le llamas en casa?</span>
+        <input type="text" data-modelo="alta.apodo" value="${esc(a.apodo)}" placeholder="Mote o apodo" autocomplete="off" autocapitalize="words" enterkeyhint="next" maxlength="30"></label>
+        <p class="nota">Mejor un mote que el nombre real: aquí no hacen falta apellidos.</p>
+        <label class="campo con-margen"><span>¿Y a ti cómo te llaman?</span>
+        <input type="text" data-modelo="alta.miApodo" value="${esc(a.miApodo)}" placeholder="Tu mote" autocomplete="off" autocapitalize="words" enterkeyhint="done" maxlength="30"></label>`, 'cristal')}
+      ${tarjeta(`${interruptor('alta.conNacimiento', a.conNacimiento, 'Añadir su fecha de nacimiento')}
         ${a.conNacimiento ? `<label class="linea"><span>Nacimiento</span><input type="date" data-modelo="alta.nacimiento" value="${a.nacimiento}" max="${hoyIso()}"></label>` : ''}
-        <p class="nota">Solo sirve para el horóscopo de broma. No influye en el pronóstico.</p>`, 'cristal')}`,
-    () => `${titulo('Ciclo menstrual', 'Opcional, y solo si ella quiere compartirlo.')}
-      ${tarjeta(`${interruptor('alta.sigueCiclo', a.sigueCiclo, 'Tener en cuenta el ciclo')}
+        <p class="nota">¿Aciertan los astros? Quién sabe. Stormy los consulta por si acaso.</p>`, 'cristal')}`,
+    ciclo: () => `${titulo('Lo que no nos explicaron en clase', 'Opcional. Si le apetece compartirlo, Stormy os lo explica.')}
+      ${tarjeta(`${interruptor('alta.sigueCiclo', a.sigueCiclo, 'Incluir el ciclo menstrual')}
         ${a.sigueCiclo ? `<label class="linea"><span>Inicio de la última regla</span><input type="date" data-modelo="alta.ultimaRegla" value="${a.ultimaRegla}" max="${hoyIso()}"></label>
-        <div class="linea"><span>Duración habitual: ${a.duracion} días</span>${paso('alta.duracion', a.duracion)}</div>` : ''}
-        <p class="nota">Se parte de un patrón general muy suave y se corrige con vuestros registros. Podéis cambiarlo cuando queráis en Ajustes.</p>`, 'cristal')}`,
-    () => `${titulo('Recordatorio diario', 'Un aviso al día. Sin él, casi nadie llega a los 30.')}
-      ${tarjeta(`<label class="linea"><span><strong>Hora del aviso</strong></span><input type="time" data-modelo="alta.hora" value="${a.hora}"></label>
-        <p class="nota">Se añade a tu calendario como un evento diario con alarma y enlace a la app. Puedes quitarlo cuando quieras desde el propio calendario.</p>`, 'cristal')}`,
-  ];
-  const ultimo = ui.paso === PASOS - 1;
-  const bloqueado = ui.paso === 1 && !a.consiente;
+        <div class="linea"><span>Duración habitual: ${a.duracion} días</span>${paso('alta.duracion')}</div>` : ''}
+        <p class="nota">Esta información sirve para entender, no para etiquetar. Cada persona vive el ciclo de forma distinta: Stormy parte de un patrón general muy suave y lo corrige con vuestros registros.</p>
+        <p class="nota">Es un dato de salud y se queda en este dispositivo. Se puede cambiar o quitar cuando queráis en Ajustes.</p>`, 'cristal')}`,
+    aviso: () => `${titulo('Recordatorio diario', 'Un aviso al día. Sin él, casi nadie llega a los 30.')}
+      ${tarjeta(`<div class="aviso-ejemplo" role="img" aria-label="Ejemplo: llega el aviso «¿Qué tiempo ha hecho hoy en casa?», lo abres y eliges una de las cinco opciones">
+          <div class="notificacion">${avatarNimbo(34)}<div><strong>Stormy <small>ahora</small></strong><p>¿Qué tiempo ha hecho hoy en casa?</p></div></div>
+          <span class="baja-flecha">${ICONOS.subir}</span>
+          <div class="cinco">${ORDEN_TIEMPOS.map((t) => ficha(t, 42)).join('')}</div>
+        </div>
+        <p class="nota centro"><strong>Dos toques: abres el aviso y eliges.</strong></p>`, 'cristal')}
+      ${tarjeta(`<label class="linea sin-margen"><span><strong>Hora del aviso</strong></span><input type="time" data-modelo="alta.hora" value="${a.hora}"></label>
+        <p class="nota">Puedes cambiar la hora cuando quieras en Ajustes.</p>`, 'cristal')}`,
+  };
+  const orden = pasosAlta();
+  ui.paso = Math.min(Math.max(0, ui.paso), orden.length - 1);
+  const id = orden[ui.paso];
+  const ultimo = ui.paso === orden.length - 1;
+  const bloqueado = (id === 'juego' && !a.consiente) || (id === 'quien' && !a.relacion);
+  const quieto = ui.pasoPintado === id;
+  ui.pasoPintado = id;
   return `<main class="bienvenida">
-    <div class="indicador" aria-hidden="true">${Array.from({ length: PASOS }, (_, i) => `<i class="${i <= ui.paso ? 'on' : ''}"></i>`).join('')}</div>
-    <div class="paso" data-paso="${ui.paso}">${pasos[Math.min(ui.paso, PASOS - 1)]()}</div>
+    <div class="indicador" aria-hidden="true">${orden.map((_, i) => `<i class="${i <= ui.paso ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="paso ${quieto ? 'quieto' : ''}" data-paso="${id}">${pasos[id]()}</div>
     <footer class="pie">
       ${ultimo
-        ? `<button class="principal" data-accion="terminar" data-aviso="1">Añadir aviso y empezar</button>
+        ? `<button class="principal" data-accion="terminar" data-aviso="1">Activar aviso y empezar</button>
            <button class="secundario" data-accion="terminar">Empezar sin aviso</button>`
         : `<button class="principal" data-accion="siguiente" ${bloqueado ? 'disabled' : ''}>${ui.paso === 0 ? 'Empezar' : 'Continuar'}</button>
            ${ui.paso > 0 ? '<button class="secundario" data-accion="atras">Atrás</button>' : ''}`}
@@ -131,108 +235,208 @@ function bienvenida() {
   </main>`;
 }
 
-const paso = (modelo, valor) =>
-  `<span class="pasos"><button type="button" data-accion="pasoNumero" data-modelo="${modelo}" data-d="-1" aria-label="Un día menos">−</button><button type="button" data-accion="pasoNumero" data-modelo="${modelo}" data-d="1" aria-label="Un día más">+</button></span>`;
-
 // ---------- Hoy ----------
 
+function anillosNiveles(dias) {
+  return NIVELES.map((n, i) => {
+    const previo = NIVELES[i - 1]?.dias ?? 0;
+    const progreso = i === 0 ? 1 : (dias - previo) / (n.dias - previo);
+    return anillo(progreso, dias >= n.dias ? ICONOS[n.icono] : `<b>${n.dias}</b>`, 36, 4);
+  }).join('');
+}
+
 function vistaHoy() {
+  const st = E();
   const hoy = hoyIso();
   const m = motor();
-  const entrada = estado.entradas[hoy];
+  const entrada = st.entradas[hoy];
   // Con el parte ya registrado, la previsión se calcula sin mirarlo: así "preveía" es una comparación honesta.
   const p = m.pronostico(hoy, entrada ? hoy : null);
   const t = entrada?.animo ?? p.tiempo;
-  const perfil = estado.perfil;
+  const perfil = st.perfil;
   const dias = m.dias;
 
   const visibles = diasDePronostico(dias);
   const proximos = m.pronosticos(aIso(aNum(hoy) + 1), 7)
     .map((f, i) => `<div><span>${SEMANA.inicial[diaSemana(aNum(f.dia))]}</span>${
-      i < visibles ? ficha(f.tiempo, 36) : `<span class="bloqueo" aria-label="Bloqueado">${ICONOS.candado}</span>`}</div>`)
+      i < visibles ? ficha(f.tiempo, 34) : `<span class="bloqueo" aria-label="Bloqueado">${ICONOS.candado}</span>`}</div>`)
     .join('');
+  const cuenta = visibles === 0 ? `${faltan(14 - dias)} para tu primer pronóstico`
+    : visibles < 7 ? `${faltan(30 - dias)} para ver la semana completa` : '';
 
   const nivel = nivelActual(dias);
   const sig = nivelSiguiente(dias);
-
-  let horoscopo = '';
-  if (perfil.nacimiento) {
-    const s = signo(perfil.nacimiento);
-    horoscopo = tarjeta(`<p class="sobre">${s.emoji} Horóscopo de broma · ${s.nombre}</p>
-      <p class="texto">${fraseHoroscopo(hoy)}</p><p class="mini">Sin base científica. No influye en el pronóstico.</p>`, 'cristal');
-  }
+  const s = perfil.nacimiento ? signo(perfil.nacimiento) : null;
 
   return `<main class="hoy">
-    <header class="cabecera"><p>${fecha(hoy, { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}</p><h1>Parte de casa</h1></header>
+    <header class="cabecera">
+      <div><h1>${esc(casaDe(perfil))}</h1><p>${fechaLarga(hoy)}</p></div>
+      <button type="button" class="icono-boton" data-accion="compartir" aria-label="Compartir el parte de hoy">${ICONOS.compartir}</button>
+      <button type="button" class="burbuja-registro ${entrada ? 'hecho' : ''}" data-accion="abrirRegistro" data-guia="registrar"
+        aria-label="${entrada ? `Parte de hoy: ${TIEMPOS[entrada.animo].titulo}. Toca para cambiarlo` : 'Registrar el parte de hoy'}">${
+        entrada ? `${ICONOS.visto}${ficha(entrada.animo, 30)}` : `${ICONOS.mas}<span>Registrar</span>`}</button>
+    </header>
     <section class="heroe">
-      ${iconoTiempo(t, 132)}
-      <h2>${TIEMPOS[t].titulo}</h2>
-      <p class="sub">${entrada ? 'Parte de hoy registrado' : `Previsión para hoy con ${esc(nombreDe(perfil))}`}</p>
-      ${entrada ? `<p class="preveia">Stormy preveía: ${TIEMPOS[p.tiempo].titulo.toLowerCase()}</p>` : ''}
+      <div class="heroe-cab">
+        <span class="disco">${iconoTiempo(t, 64)}</span>
+        <div><h2>${TIEMPOS[t].titulo}</h2><p class="sub">${estadoHoy(p.tiempo, entrada?.animo ?? null)}</p></div>
+      </div>
       <div class="fiabilidad" role="img" aria-label="Fiabilidad del pronóstico: ${Math.round(p.fiabilidad * 100)} por ciento">
         <span>Fiabilidad</span><span class="medidor"><i style="width:${p.fiabilidad * 100}%"></i></span><b>${pct(p.fiabilidad)}</b>
       </div>
-      ${p.motivos.length ? `<p class="motivos">${p.motivos.join(' · ')}</p>` : ''}
+      ${p.etiquetas.length ? `<ul class="motivos" aria-label="Por qué">${p.etiquetas.slice(0, 2).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
     </section>
-    ${tarjeta(`<div class="fila"><span class="acento">${ICONOS.bombilla}</span><div><p class="sobre">Consejo del día</p><p class="texto">${consejoDe(t, hoy)}</p></div></div>`, 'cristal')}
-    <button class="principal ${entrada ? 'suave' : ''}" data-accion="abrirRegistro">${entrada ? ICONOS.lapiz : ICONOS.mas}<span>${entrada ? 'Editar el parte de hoy' : 'Registrar el parte de hoy'}</span></button>
+    ${tarjeta(`<div class="consejo-cab"><p class="sobre"><i class="acento">${ICONOS.bombilla}</i>Consejo del día</p>
+        <button type="button" class="pildora" data-accion="abrirHoroscopo">${s ? `<span aria-hidden="true">${s.emoji}</span>Horóscopo` : `${ICONOS.mas}Añadir horóscopo`}</button></div>
+      <p class="texto">${consejoDe(t, hoy, perfil.relacion)}</p>`, 'cristal compacta')}
     ${tarjeta(`<h3>Próximos días</h3><div class="semana">${proximos}</div>
-      ${visibles < 7 ? `<p class="nota">${visibles === 0 ? 'Con 14 días registrados verás el pronóstico a 3 días; con 30, la semana completa.' : 'Con 30 días registrados verás la semana completa.'}</p>` : ''}`, 'cristal')}
-    <button class="tarjeta cristal boton-tarjeta" data-accion="abrirNiveles" aria-label="Nivel ${nivel.id + 1} de ${NIVELES.length}: ${nivel.titulo}. Abre la lista de niveles">
-      <div class="nivel-cab"><span class="insignia">${ICONOS[nivel.icono]}</span><div><p class="sobre">Nivel ${nivel.id + 1} de ${NIVELES.length}</p><h3>${nivel.titulo}</h3></div><span class="flecha">${ICONOS.derecha}</span></div>
-      ${barraNiveles(dias)}
-      <p class="nota">${sig ? `Día ${dias} de 30 · faltan ${sig.dias - dias} para «${sig.premio}»` : 'Mes completo: Stormy ya conoce vuestro clima.'}</p>
-      <div class="datos"><span><i class="acento">${ICONOS.llama}</i><b>${racha(Object.keys(estado.entradas), hoy)}</b> de racha</span><span><i class="acento">${ICONOS.mas}</i><b>${totalExtras(estado)}</b> extras</span></div>
+      ${cuenta ? `<p class="nota cuenta">${ICONOS.candado}${cuenta}</p>` : ''}`, 'cristal compacta')}
+    <button class="tarjeta cristal compacta boton-tarjeta progreso-hoy" data-accion="abrirNiveles" data-guia="progreso"
+      aria-label="${nivel.titulo}. Racha de ${racha(Object.keys(st.entradas), hoy)} días y ${rayosDeEstado(st)} rayos. Abre el camino de niveles">
+      <div class="progreso-cab"><p class="sobre">Nivel ${nivel.id + 1} de ${NIVELES.length} · ${nivel.titulo}</p>
+        <span class="marcas"><span><i class="acento">${ICONOS.llama}</i>${racha(Object.keys(st.entradas), hoy)}</span><span><i class="mango">${ICONOS.rayo}</i>${rayosDeEstado(st)}</span></span></div>
+      <div class="anillos">${anillosNiveles(dias)}</div>
+      <p class="nota">${sig ? `${faltan(sig.dias - dias)} para «${premioDe(sig, perfil.sigueCiclo)}»` : 'Todos los mundos abiertos: Stormy ya conoce vuestro clima.'}</p>
     </button>
-    ${horoscopo}
-    <button class="secundario claro" data-accion="compartir">${ICONOS.compartir}<span>Compartir el parte de hoy</span></button>
   </main>`;
 }
 
-// ---------- Registro ----------
+// ---------- Registro: un toque guarda; lo demás es opcional ----------
 
 function hojaRegistro() {
   const b = ui.borrador;
-  const perfil = estado.perfil;
+  const perfil = E().perfil;
   const esHoy = b.dia === hoyIso();
   const extras = extrasDe(b);
-  const triple = (titulo, campo, opciones) => `<div class="grupo"><h4>${titulo}</h4><div class="triple">${opciones
-    .map((o, i) => `<button type="button" class="opcion ${b[campo] === i + 1 ? 'on' : ''}" aria-pressed="${b[campo] === i + 1}" data-accion="triple" data-campo="${campo}" data-v="${i + 1}">${o}</button>`)
-    .join('')}</div></div>`;
-  return `<div class="hoja-cab"><button class="texto-boton" data-accion="cerrarHoja">Cancelar</button></div>
+  const tres = (titulo, campo, nombres) =>
+    `<div class="grupo"><h4>${titulo}</h4>${eleccion(`borrador.${campo}`, b[campo], nombres.map((n, i) => [i + 1, n]))}</div>`;
+  const masDatos = !b.animo ? '' : `
+      ${b.reaccion ? `<div class="reaccion" role="status">${avatarNimbo(40, stormyEspecial())}<p>${b.reaccion}</p><span class="premio">+${b.premio}${ICONOS.rayo}</span></div>` : ''}
+      <div class="extra-cab"><div><h3>¿Añades algún dato más?</h3><p>Opcional. Se guarda solo según lo tocas.</p></div>${extras ? `<span class="contador">+${extras}</span>` : ''}</div>
+      ${tres('¿Qué tal la noche?', 'sueno', ['Mala', 'Regular', 'Buena'])}
+      ${tres('¿Día estresante?', 'estres', ['Poco', 'Normal', 'Mucho'])}
+      ${tres('Tiempo juntos', 'juntos', ['Poco', 'Normal', 'Mucho'])}
+      <div class="grupo"><h4>${esHoy ? '¿Qué ha pasado hoy?' : '¿Qué pasó ese día?'}</h4><div class="chips">${ETIQUETAS.map((e) => `<button type="button" class="opcion ${b.etiquetas.includes(e) ? 'on' : ''}" aria-pressed="${b.etiquetas.includes(e)}" data-accion="etiqueta" data-e="${esc(e)}">${e}</button>`).join('')}</div></div>
+      <div class="grupo"><h4>${esHoy ? '¿Qué toca mañana?' : '¿Qué tocaba al día siguiente?'}</h4>${eleccion('borrador.manana', b.manana, [['laborable', 'Laborable'], ['libre', 'Libre'], ['especial', 'Plan especial']])}</div>
+      ${perfil.sigueCiclo ? `<div class="caja">${interruptor('borrador.regla', b.regla, esHoy ? 'Hoy ha empezado la regla' : 'Ese día empezó la regla')}</div>` : ''}
+      <textarea class="caja" rows="2" maxlength="280" placeholder="Nota (opcional)" data-modelo="borrador.nota" aria-label="Nota">${esc(b.nota)}</textarea>
+      ${b.orientativo ? '<p class="nota sin-margen">Apuntado de memoria: cuenta para los niveles y pesa la mitad en el pronóstico.</p>' : ''}`;
+  return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">${b.animo ? 'Hecho' : 'Cerrar'}</button></div>
     <div class="hoja-cuerpo">
-      <h2>${esHoy ? `¿Qué tiempo hace hoy con ${esc(nombreDe(perfil))}?` : `¿Qué tiempo hizo con ${esc(nombreDe(perfil))}?`}</h2>
+      <h2>${esHoy ? '¿Qué tiempo ha hecho hoy en casa?' : '¿Qué tiempo hizo en casa?'}</h2>
       <p class="fecha">${fechaLarga(b.dia)}</p>
       <div class="selector">
         <div class="fichas">${ORDEN_TIEMPOS.map((t) => `<button type="button" class="${b.animo === t ? 'on' : b.animo ? 'off' : ''}" style="--tinte:${TIEMPOS[t].tinte}" aria-label="${TIEMPOS[t].titulo}" aria-pressed="${b.animo === t}" data-accion="elegirTiempo" data-t="${t}">${ficha(t, 54)}</button>`).join('')}</div>
-        <p class="${b.animo ? 'elegido' : ''}">${b.animo ? `${TIEMPOS[b.animo].titulo} · ${TIEMPOS[b.animo].desc}` : 'Toca el que más se parezca al día'}</p>
-      </div>
-      <div class="extra-cab"><div><h3>Datos extra</h3><p>Opcionales. Cada dato afina a Stormy.</p></div>${extras ? `<span class="contador">+${extras}</span>` : ''}</div>
-      ${triple('¿Cómo ha dormido?', 'sueno', ['Mal', 'Regular', 'Bien'])}
-      ${triple('Estrés del día', 'estres', ['Bajo', 'Medio', 'Alto'])}
-      <div class="grupo"><h4>¿Qué ha pasado hoy?</h4><div class="chips">${ETIQUETAS.map((e) => `<button type="button" class="opcion ${b.etiquetas.includes(e) ? 'on' : ''}" aria-pressed="${b.etiquetas.includes(e)}" data-accion="etiqueta" data-e="${esc(e)}">${e}</button>`).join('')}</div></div>
-      ${perfil.sigueCiclo ? `<div class="caja">${interruptor('borrador.regla', b.regla, 'Hoy le ha bajado la regla')}</div>` : ''}
-      <textarea class="caja" rows="2" maxlength="280" placeholder="Nota (opcional)" data-modelo="borrador.nota" aria-label="Nota">${esc(b.nota)}</textarea>
+        <p class="${b.animo ? 'elegido' : ''}">${b.animo ? `${TIEMPOS[b.animo].titulo} · ${TIEMPOS[b.animo].desc} · guardado` : 'Toca el que más se parezca al día: se guarda al momento'}</p>
+      </div>${masDatos}
     </div>
-    <div class="hoja-pie"><button class="principal" data-accion="guardarParte" ${b.animo ? '' : 'disabled'}>${b.existia ? 'Actualizar parte' : 'Guardar parte'}</button></div>`;
+    <div class="hoja-pie"><button class="principal" data-accion="cerrarHoja">${b.animo ? 'Hecho' : 'Ahora no'}</button></div>`;
 }
 
-// ---------- Niveles ----------
+/** Vuelca el borrador del registro en los datos reales. En modo demostración no se guarda nada. */
+function guardaBorrador() {
+  const b = ui.borrador;
+  if (!b?.animo || demo) return;
+  real.entradas[b.dia] = {
+    animo: b.animo, sueno: b.sueno, estres: b.estres, juntos: b.juntos, manana: b.manana,
+    etiquetas: ETIQUETAS.filter((e) => b.etiquetas.includes(e)), nota: b.nota.trim(), regla: b.regla, orientativo: b.orientativo,
+  };
+  if (b.regla && (!real.perfil.ultimaRegla || b.dia > real.perfil.ultimaRegla)) real.perfil.ultimaRegla = b.dia;
+  if (!salva()) avisa('No se ha podido guardar en este navegador');
+}
+
+/** ¿Con este día se ha cerrado su semana (de lunes a domingo) o su mes? */
+function cierres(dia) {
+  const n = aNum(dia);
+  const lunes = n - ((diaSemana(n) + 6) % 7);
+  const [a, mes] = dia.split('-').map(Number);
+  const diasMes = new Date(Date.UTC(a, mes, 0)).getUTCDate();
+  const hay = (iso) => !!E().entradas[iso];
+  return {
+    semana: Array.from({ length: 7 }, (_, i) => aIso(lunes + i)).every(hay),
+    mes: Array.from({ length: diasMes }, (_, i) => `${dia.slice(0, 8)}${String(i + 1).padStart(2, '0')}`).every(hay),
+  };
+}
+
+// ---------- Recuperación de días sin parte ----------
+
+function hojaRecuperar() {
+  const h = ui.hoja;
+  const hoy = hoyIso();
+  const n = h.pendientes;
+  const [titulo, sub] = n === 1
+    ? ['Ayer se quedó sin parte', '¿Apuntamos los dos días de una vez?']
+    : n <= 3
+      ? [`Faltan ${n} días por apuntar`, 'Todos en una pantalla: un toque por día.']
+      : ['Una semana sin partes', 'Rellénala a grandes rasgos: con lo que recuerdes basta.'];
+  const fichas = (accion, dia, elegido) => `<div class="fichas mini">${ORDEN_TIEMPOS.map((t) =>
+    `<button type="button" class="${elegido === t ? 'on' : elegido ? 'off' : ''}" style="--tinte:${TIEMPOS[t].tinte}" aria-label="${TIEMPOS[t].titulo}" aria-pressed="${elegido === t}" data-accion="${accion}" data-dia="${dia}" data-t="${t}">${ficha(t, 38)}</button>`).join('')}</div>`;
+  const marcados = Object.keys(h.elegidos).length;
+  return `<div class="hoja-cuerpo">
+      <div class="reaccion">${avatarNimbo(40, stormyEspecial())}<p><strong>${titulo}.</strong> ${sub}</p></div>
+      ${n >= 4 ? `<div class="fila-dia todos"><span>Toda la semana igual</span>${fichas('recuperaTodos', '', h.todos)}</div>` : ''}
+      ${h.dias.map((d) => `<div class="fila-dia"><span>${d === hoy ? 'Hoy' : mayus(fecha(d, { weekday: 'short', day: 'numeric' }))}</span>${fichas('recuperaDia', d, h.elegidos[d])}</div>`).join('')}
+      <p class="nota sin-margen">Los días apuntados de memoria se marcan como orientativos: cuentan para los niveles y pesan la mitad en el pronóstico.</p>
+    </div>
+    <div class="hoja-pie"><button class="principal" data-accion="recuperaGuardar" ${marcados ? '' : 'disabled'}>${marcados ? `Guardar ${marcados === 1 ? '1 día' : `${marcados} días`}` : 'Elige al menos un día'}</button>
+      <button class="secundario oscuro" data-accion="cerrarHoja">Ahora no</button></div>`;
+}
+
+/** Al abrir la app: si faltan días recientes, Stormy ofrece rellenarlos. Una vez al día; con más de una semana, calla. */
+function ofreceRecuperacion() {
+  const hoy = hoyIso();
+  if (demo || !real.perfil.alta || ui.hoja || ui.recorrido != null || real.perfil.ofertaRecuperacion === hoy) return;
+  const pendientes = diasPendientes(real, hoy);
+  if (!pendientes.length) return;
+  real.perfil.ofertaRecuperacion = hoy;
+  salva();
+  if (pendientes.length > 7) return;
+  const dias = pendientes.length === 1 && !real.entradas[hoy] ? [...pendientes, hoy] : pendientes;
+  abreHoja({ tipo: 'recuperar', dias, pendientes: pendientes.length, elegidos: {}, todos: null });
+}
+
+// ---------- Niveles: un camino de mundos ----------
 
 function hojaNiveles() {
+  const st = E();
   const dias = diasRegistrados();
-  const extras = totalExtras(estado);
+  const extras = totalExtras(st);
+  const conCiclo = st.perfil.sigueCiclo;
+  const cara = avatarNimbo(34, stormyEspecial());
+  const mundos = NIVELES.map((n, i) => {
+    const sig = NIVELES[i + 1];
+    const abierto = dias >= n.dias;
+    const aqui = abierto && (!sig || dias < sig.dias);
+    let piedras = '';
+    if (sig) {
+      for (let d = n.dias + 1; d < sig.dias; d++) {
+        piedras += `<i class="${dias >= d ? 'hecha' : ''} ${dias === d ? 'aqui' : ''}">${dias === d ? cara : `<small>${d}</small>`}</i>`;
+      }
+    }
+    return `<section class="mundo m${i} ${abierto ? 'abierto' : 'velado'} ${aqui ? 'actual' : ''}">
+        <div class="mundo-cab">
+          <span class="mundo-icono">${abierto ? ICONOS[n.icono] : ICONOS.candado}${aqui && dias === n.dias ? `<span class="aqui">${cara}</span>` : ''}</span>
+          <div><small>${n.extra ? 'Mundo extra' : `Mundo ${i + 1}`} · ${n.dias === 0 ? 'inicio' : `día ${n.dias}`}</small><h3>${n.titulo}</h3></div>
+          <b>${abierto ? ICONOS.visto : faltan(n.dias - dias)}</b>
+        </div>
+        <ul class="premios">${premioDe(n, conCiclo).split(' y ').map((x) => `<li>${ICONOS.destello}${mayus(x)}</li>`).join('')}</ul>
+        ${piedras ? `<div class="piedras" aria-hidden="true">${piedras}</div>` : ''}
+      </section>`;
+  }).join('');
   return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Hecho</button></div>
     <div class="hoja-cuerpo">
-      <h2>Niveles</h2>
-      <p class="fecha">Cada día registrado acerca a Stormy al mes completo que necesita para aprender.</p>
-      ${NIVELES.map((n) => {
-        const ok = dias >= n.dias;
-        return `<div class="tarjeta nivel ${ok ? '' : 'pendiente'}"><span class="insignia ${ok ? '' : 'gris'}">${ok ? ICONOS[n.icono] : ICONOS.candado}</span>
-          <div><h3>${n.titulo}</h3><p>${n.premio}</p></div><b>${n.dias === 0 ? 'Inicio' : ok ? `Día ${n.dias}` : `Faltan ${n.dias - dias}`}</b></div>`;
-      }).join('')}
+      <h2>El camino de Stormy</h2>
+      <p class="fecha">Cada día registrado es un paso. Sin castigos ni prisas: si un día se te pasa, el camino te espera donde lo dejaste.</p>
+      <div class="marcador">
+        <div><i class="acento">${ICONOS.llama}</i><b>${racha(Object.keys(st.entradas), hoyIso())}</b><small>de racha</small></div>
+        <div><i class="mango">${ICONOS.rayo}</i><b>${rayosDeEstado(st)}</b><small>rayos</small></div>
+        <div><i class="acento">${ICONOS.calendario}</i><b>${dias}</b><small>${dias === 1 ? 'día' : 'días'}</small></div>
+      </div>
+      <div class="camino" role="list" aria-label="Mundos: ${dias} días registrados">${mundos}</div>
+      <div class="tarjeta"><h3>Rayos</h3>
+        <p class="nota">Son solo parte del juego: ${RAYOS.parte} por cada parte, ${RAYOS.extra} por cada dato extra y ${RAYOS.semana} al completar cada bloque de 7 partes. De momento se acumulan y nada más; no cambian el pronóstico.</p></div>
       <div class="tarjeta"><div class="extra-cab"><h3>Datos extra</h3><span class="cifra-acento">${extras}</span></div>
-        <p class="nota">Sueño, estrés, etiquetas y notas. Cuantos más aportes, más factores puede explicar Stormy.</p>
+        <p class="nota">La noche, el estrés, el tiempo juntos, las etiquetas y las notas. Cuantos más aportes, más factores puede explicar Stormy.</p>
         <div class="insignias">${INSIGNIAS.map(([umbral, nombre]) => `<div class="${extras >= umbral ? 'on' : ''}"><span>${extras >= umbral ? ICONOS.medalla : ICONOS.candado}</span><b>${nombre}</b><small>${umbral} datos</small></div>`).join('')}</div>
       </div>
     </div>`;
@@ -242,26 +446,27 @@ function hojaNivelNuevo() {
   const n = ui.hoja.nivel;
   return `<div class="hoja-cuerpo celebracion">
       <span class="insignia grande">${ICONOS[n.icono]}</span>
-      <p class="rotulo">¡Nivel desbloqueado!</p>
+      <p class="rotulo">${n.extra ? '¡Mundo extra abierto!' : '¡Nivel desbloqueado!'}</p>
       <h2>${n.titulo}</h2>
-      <p>Llevas ${n.dias} días registrados. Ahora tienes: ${n.premio.toLowerCase()}.</p>
+      <p>Llevas ${n.dias} días registrados. Ahora tienes: ${premioDe(n, E().perfil.sigueCiclo).toLowerCase()}.</p>
     </div>
     <div class="hoja-pie"><button class="principal" data-accion="cerrarHoja">Genial</button></div>`;
 }
 
-// ---------- Nimbo, el ayudante ----------
+// ---------- Stormy, el ayudante ----------
 
-const contextoNimbo = () => ({ motor: motor(), entradas: estado.entradas, perfil: estado.perfil, hoy: hoyIso() });
+const contextoNimbo = () => ({ motor: motor(), entradas: E().entradas, perfil: E().perfil, hoy: hoyIso(), rayos: rayosDeEstado(E()) });
 
 function hojaNimbo() {
+  const especial = stormyEspecial();
   const mensajes = ui.chat
-    .map((m) => `<div class="burbuja ${m.de}">${m.de === 'nimbo' ? avatarNimbo(30) : ''}<p>${esc(m.texto)}</p></div>`)
+    .map((m) => `<div class="burbuja ${m.de}">${m.de === 'nimbo' ? avatarNimbo(30, especial) : ''}<p>${esc(m.texto)}</p></div>`)
     .join('');
-  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatarNimbo(30)}<p class="puntos-pensando" aria-label="Stormy está escribiendo"><i></i><i></i><i></i></p></div>` : '';
-  return `<div class="hoja-cab nimbo-cab">${avatarNimbo(44)}<div><h3>${NIMBO.nombre}</h3><p>${NIMBO.cargo}</p></div><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
+  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatarNimbo(30, especial)}<p class="puntos-pensando" aria-label="Stormy está escribiendo"><i></i><i></i><i></i></p></div>` : '';
+  return `<div class="hoja-cab nimbo-cab">${avatarNimbo(44, especial)}<div><h3>${NIMBO.nombre}</h3><p>${NIMBO.cargo}</p></div><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
     <div class="hoja-cuerpo chat" role="log" aria-live="polite">${mensajes}${pensando}</div>
     <div class="hoja-pie nimbo-pie">
-      <div class="sugerencias">${NIMBO.sugerencias.map((s) => `<button type="button" class="opcion" data-accion="preguntar" data-q="${esc(s)}">${s}</button>`).join('')}</div>
+      <div class="sugerencias">${sugerenciasDe(E().perfil).map((s) => `<button type="button" class="opcion" data-accion="preguntar" data-q="${esc(s)}">${s}</button>`).join('')}</div>
       <form id="form-nimbo" autocomplete="off"><input type="text" id="pregunta" placeholder="Pregúntale a Stormy" enterkeyhint="send" maxlength="140" aria-label="Tu pregunta para Stormy"><button type="submit" class="enviar" aria-label="Enviar">${ICONOS.subir}</button></form>
     </div>`;
 }
@@ -290,7 +495,7 @@ function preguntaANimbo(texto) {
 function hojaConfirmar() {
   const c = ui.hoja;
   return `<div class="hoja-cuerpo celebracion"><h2>${c.titulo}</h2><p>${c.texto}</p></div>
-    <div class="hoja-pie"><button class="principal peligro" data-accion="${c.accion}">${c.boton}</button><button class="secundario oscuro" data-accion="cerrarHoja">Cancelar</button></div>`;
+    <div class="hoja-pie"><button class="principal ${c.suave ? '' : 'peligro'}" data-accion="${c.accion}">${c.boton}</button><button class="secundario oscuro" data-accion="cerrarHoja">${c.cancelar ?? 'Cancelar'}</button></div>`;
 }
 
 function hojaTexto() {
@@ -299,83 +504,250 @@ function hojaTexto() {
     <div class="hoja-cuerpo"><h2>${c.titulo}</h2>${c.bloques.map(([t, x]) => `<div class="tarjeta"><h3>${t}</h3><p class="nota">${x}</p></div>`).join('')}</div>`;
 }
 
+function hojaCodigo() {
+  const ver = ui.hoja.modo === 'ver';
+  return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
+    <div class="hoja-cuerpo">
+      <h2>${ver ? 'Código de traspaso' : 'Tengo un código'}</h2>
+      <p class="fecha">${ver
+        ? 'Son tus datos convertidos en texto. Cópialo, envíatelo como prefieras y pégalo en Stormy en el otro móvil (Ajustes → «Tengo un código de traspaso»). No pasa por ningún servidor de Stormy.'
+        : 'Pega aquí el código que copiaste en el otro móvil.'}</p>
+      <textarea class="caja codigo" id="codigo" rows="6" ${ver ? 'readonly' : 'placeholder="STORMY1.…"'} aria-label="Código de traspaso" autocomplete="off" autocapitalize="off" spellcheck="false">${ver ? esc(aCodigo(real)) : ''}</textarea>
+      ${ver ? '<p class="nota sin-margen">Incluye todo lo apuntado, también el ciclo si está activado. Trátalo como algo privado.</p>' : ''}
+    </div>
+    <div class="hoja-pie"><button class="principal" data-accion="${ver ? 'copiarCodigo' : 'usarCodigo'}">${ver ? 'Copiar código' : 'Recuperar datos'}</button></div>`;
+}
+
+function hojaAviso() {
+  const permiso = ui.hoja.permiso;
+  const estado = permiso === 'granted'
+    ? 'Permiso de avisos concedido.'
+    : permiso === 'denied'
+      ? 'No has dado permiso para los avisos; no pasa nada.'
+      : `Este navegador no admite avisos${esIOS() && !enPantallaDeInicio() ? ' (en iPhone hace falta instalar antes Stormy en la pantalla de inicio)' : ''}.`;
+  return `<div class="hoja-cuerpo celebracion">
+      <span class="insignia grande">${ICONOS.campana}</span>
+      <h2>Falta la alarma</h2>
+      <p>${estado} Por ahora Stormy no puede enviarte el aviso diario por su cuenta: el recordatorio va por tu calendario, con una alarma a las ${esc(real.perfil.horaAviso)} y un enlace que abre el registro.</p>
+      <p><strong>Dos toques: abres el aviso y eliges.</strong></p>
+    </div>
+    <div class="hoja-pie"><button class="principal" data-accion="recordatorio" data-cierra="1">Añadir alarma al calendario</button><button class="secundario oscuro" data-accion="cerrarHoja">Ahora no</button></div>`;
+}
+
 // ---------- Calendario ----------
 
 function vistaCalendario() {
+  const st = E();
   const hoy = hoyIso();
   const m = motor();
+  if (ui.mes > mesMaximo()) ui.mes = hoy.slice(0, 7);
   const [a, mes] = ui.mes.split('-').map(Number);
   const primero = `${ui.mes}-01`;
   const n0 = aNum(primero);
   const numDias = new Date(Date.UTC(a, mes, 0)).getUTCDate();
   const hueco = (diaSemana(n0) + 6) % 7;
-  const esMesActual = ui.mes === hoy.slice(0, 7);
-  const sigue = estado.perfil.sigueCiclo;
+  const sigue = st.perfil.sigueCiclo;
+  const enUltimoMes = ui.mes >= mesMaximo();
+  const esFuturo = ui.mes > hoy.slice(0, 7);
+  const registradas = new Set(reglasDe(st));
+  // Animaciones del último parte: solo cuando el calendario está a la vista, sin hoja encima.
+  const recien = ui.hoja ? null : ui.recien;
+  const lunesRecien = recien?.semana ? aNum(recien.dia) - ((diaSemana(aNum(recien.dia)) + 6) % 7) : null;
 
   let celdas = '<i></i>'.repeat(hueco);
   const delMes = [];
+  let orientativos = 0;
   for (let i = 0; i < numDias; i++) {
     const iso = aIso(n0 + i);
-    const e = estado.entradas[iso];
+    const e = st.entradas[iso];
     if (e) delMes.push(e);
+    if (e?.orientativo) orientativos++;
     const futuro = iso > hoy;
-    const regla = sigue && (e?.regla || m.fase(iso) === 'menstrual');
-    celdas += `<button type="button" class="dia ${iso === hoy ? 'hoy' : ''} ${futuro ? 'futuro' : ''}" ${futuro ? 'disabled' : ''} data-accion="abrirRegistro" data-dia="${iso}"
-      aria-label="${fecha(iso, { day: 'numeric', month: 'long' })}: ${e ? TIEMPOS[e.animo].titulo : futuro ? 'día futuro' : 'sin registrar'}">
-      <span>${i + 1}</span>${e ? ficha(e.animo, 34) : `<span class="vacio">${iso === hoy ? ICONOS.mas : ''}</span>`}<em class="${regla ? 'on' : ''}"></em></button>`;
+    const regla = sigue ? marcaRegla(m, iso, registradas) : null;
+    const luz = lunesRecien != null && n0 + i >= lunesRecien && n0 + i < lunesRecien + 7;
+    celdas += `<button type="button" class="dia ${iso === hoy ? 'hoy' : ''} ${futuro ? 'futuro' : ''} ${e?.orientativo ? 'orientativo' : ''} ${recien?.dia === iso ? 'recien' : ''} ${luz ? 'fila-luz' : ''} ${regla ? `regla-${regla}` : ''}" ${futuro ? 'disabled' : ''} data-accion="abrirRegistro" data-dia="${iso}"
+      aria-label="${fecha(iso, { day: 'numeric', month: 'long' })}: ${e ? `${TIEMPOS[e.animo].titulo}${e.orientativo ? ', apuntado de memoria' : ''}` : futuro ? 'día futuro' : 'sin registrar'}${regla ? `, regla ${regla}` : ''}">
+      <span>${i + 1}</span>${e ? ficha(e.animo, 34) : `<span class="vacio">${iso === hoy ? ICONOS.mas : ''}</span>`}</button>`;
   }
+
+  // Mes de ejemplo: se ve solo mientras se mantiene pulsado el botón. No guarda nada.
+  const dem = Object.values(ejemplo(30, st.perfil).entradas);
+  const HITOS = { 7: 1, 14: 2, 21: 3, 30: 4 };
+  const celdasEjemplo = dem.map((e, i) => `<span class="dia ${HITOS[i + 1] ? 'hito' : ''}"><span>${i + 1}</span>${ficha(e.animo, 34)}</span>`).join('');
+  const hitos = Object.entries(HITOS).map(([d, n]) => `<li><b>Día ${d}</b>${premioDe(NIVELES[n], sigue)}</li>`).join('');
 
   let resumen;
   if (!delMes.length) {
-    resumen = '<p class="nota">Aún no hay partes este mes. Toca un día para registrarlo.</p>';
+    resumen = `<p class="nota">${esFuturo ? 'Mes por llegar: solo se ve la regla que estima Stormy.' : 'Aún no hay partes este mes. Toca un día para registrarlo.'}</p>`;
   } else {
     const med = delMes.reduce((s, e) => s + e.animo, 0) / delMes.length;
-    resumen = `<p class="nota">${delMes.length} ${delMes.length === 1 ? 'parte' : 'partes'} · clima medio: ${TIEMPOS[tiempoDe(med)].titulo.toLowerCase()}</p>
+    resumen = `<p class="nota">${delMes.length} ${delMes.length === 1 ? 'parte' : 'partes'} · clima medio: ${TIEMPOS[tiempoDe(med)].titulo.toLowerCase()}${delMes.length === numDias ? ' · mes completo' : ''}</p>
       <div class="recuento">${ORDEN_TIEMPOS.map((t) => `<div>${ficha(t, 34)}<b>${delMes.filter((e) => e.animo === t).length}</b></div>`).join('')}</div>`;
   }
 
   return `<main class="pagina">
     <h1>Calendario</h1>
-    ${tarjeta(`<div class="mes-cab">
-        <button type="button" data-accion="mes" data-d="-1" aria-label="Mes anterior">${ICONOS.izquierda}</button>
-        <h3>${mayus(fecha(primero, { month: 'long', year: 'numeric' }))}</h3>
-        <button type="button" data-accion="mes" data-d="1" aria-label="Mes siguiente" ${esMesActual ? 'disabled' : ''}>${ICONOS.derecha}</button>
+    ${recien?.mes ? `<div class="mes-completo" role="status"><i></i><i></i><i></i><i></i><i></i><i></i><strong>¡Mes completo!</strong><span>Ni un día sin parte. Stormy se quita el sombrero.</span></div>` : ''}
+    <button type="button" class="mantener" data-mantener aria-pressed="false">${ICONOS.ojo}<span>Ver un mes completo</span><small>mantén pulsado</small></button>
+    <article class="tarjeta cal">
+      <div class="cal-real">
+        <div class="mes-cab">
+          <button type="button" data-accion="mes" data-d="-1" aria-label="Mes anterior">${ICONOS.izquierda}</button>
+          <h3>${mayus(fecha(primero, { month: 'long', year: 'numeric' }))}</h3>
+          <button type="button" data-accion="mes" data-d="1" aria-label="Mes siguiente" ${enUltimoMes ? 'disabled' : ''}>${ICONOS.derecha}</button>
+        </div>
+        ${sigue ? '<p class="leyenda-regla"><span><i class="muestra-regla registrada"></i>Regla apuntada</span><span><i class="muestra-regla estimada"></i>Regla estimada</span></p>' : ''}
+        <div class="rejilla cab">${SEMANA.orden.map((d) => `<span>${SEMANA.inicial[d]}</span>`).join('')}</div>
+        <div class="rejilla">${celdas}</div>
       </div>
-      <div class="rejilla cab">${SEMANA.orden.map((d) => `<span>${SEMANA.inicial[d]}</span>`).join('')}</div>
-      <div class="rejilla">${celdas}</div>`)}
+      <div class="cal-ejemplo" aria-hidden="true">
+        <div class="mes-cab"><h3>Un mes completo</h3><span class="etiqueta-ejemplo">Vista de ejemplo</span></div>
+        <div class="rejilla">${celdasEjemplo}</div>
+        <ul class="hitos">${hitos}</ul>
+      </div>
+    </article>
     ${tarjeta(`<h3>Resumen del mes</h3>${resumen}`)}
-    ${sigue ? '<p class="leyenda"><em class="on"></em> Regla (registrada o estimada)</p>' : ''}
+    ${orientativos ? '<p class="leyenda"><span><i class="marca-orientativo"></i> Apuntado de memoria</span></p>' : ''}
   </main>`;
+}
+
+/** Con el ciclo activado se puede avanzar tres meses para ver las próximas reglas estimadas. */
+function mesMaximo() {
+  const [a, m] = hoyIso().split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1 + (E().perfil.sigueCiclo ? 3 : 0), 1)).toISOString().slice(0, 7);
 }
 
 // ---------- Descubrimientos ----------
 
-function vistaDescubrimientos() {
-  const m = motor();
-  const dias = m.dias;
-  const bloqueada = (titulo, necesarios) =>
-    tarjeta(`<header class="encabezado"><span class="marca gris">${ICONOS.candado}</span><div><h3>${titulo}</h3><p>Se desbloquea con ${necesarios} días · faltan ${necesarios - dias}</p></div></header>
-      <div class="progreso"><i style="width:${(dias / necesarios) * 100}%"></i></div>`);
+const temasDe = (perfil) => [
+  { id: 'historico', titulo: 'Histórico', icono: 'historia', dias: 2 },
+  { id: 'semanal', titulo: 'Patrón semanal', icono: 'semana', dias: 7 },
+  { id: 'factores', titulo: 'Factores', icono: 'factores', dias: 14 },
+  perfil.sigueCiclo
+    ? { id: 'ciclo', titulo: 'Mapa del ciclo', icono: 'ciclo', dias: 21 }
+    : { id: 'detalle', titulo: 'Factores en detalle', icono: 'ojo', dias: 21 },
+  { id: 'precision', titulo: 'Precisión', icono: 'diana', dias: 30 },
+  { id: 'semanas', titulo: 'Comparar semanas', icono: 'comparar', dias: 40 },
+  { id: 'resumen', titulo: 'Resumen de la casa', icono: 'resumen', dias: 50 },
+];
+/** Las dos secciones fijas de arriba: siempre abiertas, no dependen de los días registrados. */
+const ESPECIALES = { conoce: { id: 'conoce', titulo: 'Conoce el ciclo', dias: 0 }, horoscopo: { id: 'horoscopo', titulo: 'Tu horóscopo', dias: 0 } };
 
-  return `<main class="pagina">
+// ---------- Rueda del ciclo ----------
+
+/** Tramos de días de cada fase para un ciclo de `L` días: [{id, desde, hasta}]. */
+function tramosCiclo(L) {
+  const tramos = [];
+  for (let d = 1; d <= L; d++) {
+    const f = faseDe(d, L);
+    if (tramos.at(-1)?.id === f) tramos.at(-1).hasta = d;
+    else tramos.push({ id: f, desde: d, hasta: d });
+  }
+  return tramos;
+}
+
+const polar = (c, r, ang) => [c + r * Math.cos(ang), c + r * Math.sin(ang)];
+function sectorAnillo(c, r1, r2, a1, a2) {
+  const [x1, y1] = polar(c, r2, a1), [x2, y2] = polar(c, r2, a2), [x3, y3] = polar(c, r1, a2), [x4, y4] = polar(c, r1, a1);
+  const grande = a2 - a1 > Math.PI ? 1 : 0;
+  const f = (v) => v.toFixed(2);
+  return `M${f(x1)} ${f(y1)}A${r2} ${r2} 0 ${grande} 1 ${f(x2)} ${f(y2)}L${f(x3)} ${f(y3)}A${r1} ${r1} 0 ${grande} 0 ${f(x4)} ${f(y4)}Z`;
+}
+
+/** Rueda de fases. Con `interactiva`, cada fase es un botón que abre su explicación. */
+function ruedaCiclo(m, lado, { interactiva = false, elegida = null } = {}) {
+  const L = m.duracion;
+  const hoyDia = m.diaCiclo(hoyIso());
+  const c = 100;
+  const paso = (2 * Math.PI) / L;
+  const inicio = -Math.PI / 2;
+  const sectores = tramosCiclo(L).map((t) => {
+    const fase = FASES.find((f) => f.id === t.id);
+    const d = sectorAnillo(c, 60, 94, inicio + (t.desde - 1) * paso + 0.012, inicio + t.hasta * paso - 0.012);
+    const etiqueta = `${fase.titulo}, días ${t.desde} a ${t.hasta}`;
+    return interactiva
+      ? `<path d="${d}" fill="${FASES_INFO[t.id].color}" class="sector ${elegida === t.id ? 'elegido' : ''}" role="button" tabindex="0" aria-label="${etiqueta}. Ver explicación" data-accion="faseCiclo" data-id="${t.id}"/>`
+      : `<path d="${d}" fill="${FASES_INFO[t.id].color}"/>`;
+  }).join('');
+  let marca = '';
+  if (hoyDia) {
+    const [x, y] = polar(c, 77, inicio + (hoyDia - 0.5) * paso);
+    marca = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="11" fill="#fff" stroke="#1E2749" stroke-width="4"/>`;
+  }
+  const centro = interactiva
+    ? `<text x="100" y="${hoyDia ? 94 : 104}" class="rueda-grande">${hoyDia ? `Día ${hoyDia}` : `${L} días`}</text>${hoyDia ? `<text x="100" y="118" class="rueda-chica">de ${L}</text>` : ''}`
+    : '';
+  return `<svg class="rueda" viewBox="0 0 200 200" width="${lado}" height="${lado}" ${interactiva ? 'role="group" aria-label="Fases del ciclo"' : 'aria-hidden="true"'}>${sectores}${marca}${centro}</svg>`;
+}
+
+function vistaDescubrimientos() {
+  const st = E();
+  const dias = diasRegistrados();
+  const perfil = st.perfil;
+  const circulos = temasDe(perfil).map((t) => {
+    const abierto = dias >= t.dias;
+    return `<button type="button" class="circulo ${abierto ? 'abierto' : 'cerrado'}" data-accion="abrirTema" data-id="${t.id}"
+      aria-label="${t.titulo}: ${abierto ? 'disponible' : `se desbloquea con ${t.dias} días, ${faltan(t.dias - dias).toLowerCase()}. Abre una vista de ejemplo`}">
+      ${anillo(dias / t.dias, ICONOS[t.icono], 64, 5)}
+      <strong>${t.titulo}</strong><small>${abierto ? 'Abierto' : faltan(t.dias - dias)}</small></button>`;
+  }).join('');
+  const m = motor();
+  const hoyDia = m.diaCiclo(hoyIso());
+  const faseHoy = hoyDia ? FASES.find((f) => f.id === m.fase(hoyIso())) : null;
+  const s = perfil.nacimiento ? signo(perfil.nacimiento) : null;
+  const luna = faseLunar(hoyIso());
+  const ciclo = perfil.sigueCiclo
+    ? `<button type="button" class="destacada ciclo-card" data-accion="abrirTema" data-id="conoce">
+        ${ruedaCiclo(m, 58)}<span><strong>Conoce el ciclo</strong><small>${faseHoy ? `Hoy: ${faseHoy.titulo.toLowerCase()}` : 'Las fases, una a una'}</small></span></button>`
+    : '';
+  const horoscopoCard = `<button type="button" class="destacada horoscopo-card" data-accion="abrirTema" data-id="horoscopo">
+      <span class="signo-grande" aria-hidden="true">${s ? s.emoji : lunaSVG(luna, 52)}</span><span><strong>Tu horóscopo</strong><small>${s ? `${s.nombre} · ${luna.nombre.toLowerCase()}` : 'Añádelo con una fecha'}</small></span></button>`;
+  return `<main class="pagina descubrimientos">
     <h1>Descubrimientos</h1>
-    ${historico()}
-    ${dias >= 7 ? patronSemanal(m) : bloqueada('Patrón semanal', 7)}
-    ${dias >= 14 ? factores(m) : bloqueada('Factores que influyen', 14)}
-    ${dias >= 21 ? mapaCiclo(m) : bloqueada('Mapa del ciclo', 21)}
-    ${dias >= 30 ? precision(m) : bloqueada('Precisión de Stormy', 30)}
-    <p class="aviso">Los patrones salen solo de vuestros registros. Con pocos días son orientativos: tómatelos con humor.</p>
+    <div class="destacadas ${ciclo ? '' : 'una'}">${ciclo}${horoscopoCard}</div>
+    <h2 class="seccion">Lo que Stormy aprende de vuestra casa</h2>
+    <div class="circulos">${circulos}</div>
+    <p class="aviso">Los patrones salen solo de vuestros registros. Con pocos días son orientativos.</p>
   </main>`;
 }
 
-function historico() {
-  const ultimas = Object.entries(estado.entradas).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-30);
+function hojaTema() {
+  const st = E();
+  const id = ui.hoja.id;
+  const tema = ESPECIALES[id] ?? temasDe({ sigueCiclo: true }).concat(temasDe({ sigueCiclo: false })).find((t) => t.id === id);
+  const dias = diasRegistrados();
+  const abierto = dias >= tema.dias;
+  const fuente = abierto ? st : muestra();
+  const m = abierto ? motor() : motorDe(fuente);
+  const cuerpo = {
+    historico: () => historico(fuente),
+    semanal: () => patronSemanal(m),
+    factores: () => factores(m, 6),
+    detalle: () => factores(m, 20) + automaticos(m),
+    ciclo: () => mapaCiclo(m),
+    precision: () => precision(m),
+    semanas: () => semanas(m),
+    resumen: () => resumenCasa(m, fuente, abierto),
+    horoscopo: () => horoscopo(st),
+    conoce: () => conoceCiclo(m),
+  }[tema.id]();
+  return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Hecho</button></div>
+    <div class="hoja-cuerpo">
+      <h2>${tema.titulo}</h2>
+      ${abierto ? '' : `<p class="fecha"><span class="etiqueta-ejemplo">Vista de ejemplo</span> Se desbloquea con ${tema.dias} días registrados: ${faltan(tema.dias - dias).toLowerCase()}. Así se verá con vuestros partes.</p>`}
+      ${cuerpo}
+    </div>`;
+}
+
+function historico(st) {
+  const ultimas = Object.entries(st.entradas).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-30);
+  const n = ultimas.length;
   let cuerpo;
-  if (ultimas.length < 2) {
+  if (n < 2) {
     cuerpo = '<p class="nota">Registra al menos dos días para ver la evolución.</p>';
   } else {
     const W = 300, H = 150;
-    const x = (i) => 8 + (i * (W - 16)) / (ultimas.length - 1);
+    const x = (i) => 8 + (i * (W - 16)) / (n - 1);
     const y = (a) => H - 15 - (a - 1) * 30;
     const puntos = ultimas.map(([, e], i) => `${x(i).toFixed(1)},${y(e.animo)}`).join(' ');
     cuerpo = `<div class="grafico">
@@ -386,9 +758,10 @@ function historico() {
         <div class="puntos">${ultimas.map(([, e], i) => `<i style="left:${(x(i) / W) * 100}%;top:${(y(e.animo) / H) * 100}%;background:${TIEMPOS[e.animo].tinte}"></i>`).join('')}</div>
         <div class="eje">${ORDEN_TIEMPOS.map((t) => ficha(t, 20)).join('')}</div>
       </div>
-      <div class="eje-x"><span>${fecha(ultimas[0][0], { day: 'numeric', month: 'short' })}</span><span>${fecha(ultimas[ultimas.length - 1][0], { day: 'numeric', month: 'short' })}</span></div>`;
+      <div class="eje-x"><span>${fecha(ultimas[0][0], { day: 'numeric', month: 'short' })}</span><span>${fecha(ultimas[n - 1][0], { day: 'numeric', month: 'short' })}</span></div>`;
   }
-  return tarjeta(encabezado('historia', 'Histórico', `Los últimos ${Math.max(ultimas.length, 1)} partes`) + cuerpo);
+  const sub = n === 0 ? 'Aún sin partes' : n === 1 ? 'El último parte' : `Los últimos ${n} partes`;
+  return tarjeta(encabezado('historia', 'Histórico', sub) + cuerpo);
 }
 
 function patronSemanal(m) {
@@ -401,71 +774,192 @@ function patronSemanal(m) {
     ${mejor && peor && mejor.id !== peor.id ? `<p class="texto-normal">El mejor día suelen ser los <strong>${SEMANA.plural[mejor.id]}</strong>; los más cubiertos, los <strong>${SEMANA.plural[peor.id]}</strong>.</p>` : ''}`);
 }
 
-function factores(m) {
-  const lista = m.factores().slice(0, 6);
+const filaFactor = (f) =>
+  `<div class="factor"><span class="${f.delta >= 0 ? 'sube' : 'baja'}">${f.delta >= 0 ? '↗' : '↘'}</span><div><strong>${esc(f.titulo)}</strong><small>${f.dias} días</small></div><b>${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))}</b></div>`;
+
+function factores(m, cuantos) {
+  const lista = m.factores().slice(0, cuantos);
   const cuerpo = lista.length
-    ? `${lista.map((f) => `<div class="factor"><span class="${f.delta >= 0 ? 'sube' : 'baja'}">${f.delta >= 0 ? '↗' : '↘'}</span><div><strong>${esc(f.titulo)}</strong><small>${f.dias} días</small></div><b>${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))}</b></div>`).join('')}
+    ? `${lista.map(filaFactor).join('')}
        <p class="mini">En niveles de tiempo (de 1 a 5). Son coincidencias observadas, no causas demostradas.</p>`
-    : '<p class="nota">Añade datos extra (sueño, estrés, etiquetas) al registrar y aquí verás qué mueve el clima de casa.</p>';
+    : '<p class="nota">Añade datos extra (la noche, el estrés, el tiempo juntos, etiquetas) al registrar y aquí verás qué mueve el clima de casa.</p>';
   return tarjeta(encabezado('factores', 'Factores que influyen', 'Diferencia frente a un día normal') + cuerpo);
+}
+
+/** Luna, luz, estación y día de la semana: solo se enseñan los que marcan diferencia en los datos de la casa. */
+function automaticos(m) {
+  const vistos = m.automaticos().filter((f) => f.visible);
+  const cuerpo = vistos.length
+    ? `${vistos.map(filaFactor).join('')}<p class="mini">Stormy los calcula solo a partir de la fecha. No entran en el pronóstico: son coincidencias, no causas.</p>`
+    : '<p class="nota">Stormy mira también la fase de la luna, las horas de luz, la estación y si es fin de semana. Con vuestros partes, de momento ninguno marca una diferencia que merezca enseñarse.</p>';
+  return tarjeta(encabezado('luna', 'Sin apuntar nada', 'Luna, horas de luz, estación y día de la semana') + cuerpo);
 }
 
 function mapaCiclo(m) {
   const fases = m.mediasPorFase();
   const cuerpo = fases.length
     ? `${fases.map((f) => `<div class="factor">${f.dias ? ficha(tiempoDe(f.media), 38) : '<span class="ficha-vacia"></span>'}<div><strong>${f.titulo}</strong><small>${f.dias ? `${TIEMPOS[tiempoDe(f.media)].titulo} · ${f.dias} días` : 'Sin datos todavía'}</small></div>${f.dias ? `<b>${num(f.media)}</b>` : ''}</div>`).join('')}
-       <p class="mini">Ciclo de ${m.duracion} días. Con un solo mes es una primera foto: se afina con cada ciclo.</p>`
-    : '<p class="nota">Activa el seguimiento del ciclo en Ajustes (si ella quiere compartirlo) para ver este mapa.</p>';
-  return tarjeta(encabezado('ciclo', 'Mapa del ciclo', 'Tiempo medio en cada fase') + cuerpo);
+       <p class="mini">Ciclo de ${m.duracion} días. Es el tiempo medio en casa en cada fase, no una regla sobre nadie; con un solo mes es una primera foto.</p>`
+    : '<p class="nota">El ciclo menstrual se puede añadir en Ajustes, si lo veis necesario.</p>';
+  return tarjeta(encabezado('ciclo', 'Mapa del ciclo', 'Tiempo medio en casa en cada fase') + cuerpo);
 }
 
 function precision(m) {
   const p = m.precision();
+  if (!p) return tarjeta('<p class="nota sin-margen">Hace falta al menos una semana de partes.</p>');
   return tarjeta(`${encabezado('diana', 'Precisión de Stormy', 'Comprobada contra vuestros propios registros')}
     <div class="cifras"><div><b>${pct(p.exacto)}</b><small>acierto exacto</small></div><div><b>${pct(p.cercano)}</b><small>acierta o roza</small></div><div><b>${num(p.error)}</b><small>desvío medio</small></div></div>
     <p class="mini">Para cada uno de los ${p.dias} días, Stormy lo predice sin mirar ese día y se compara con lo que registraste. «Roza» significa fallar por un solo nivel.</p>`);
 }
 
+function semanas(m) {
+  const lista = m.mediasPorSemana(6);
+  if (lista.length < 2) return tarjeta('<p class="nota sin-margen">Hacen falta al menos dos semanas con partes para compararlas.</p>');
+  const ultima = lista[lista.length - 1];
+  const previa = lista[lista.length - 2];
+  const d = ultima.media - previa.media;
+  return tarjeta(`${encabezado('comparar', 'Comparar semanas', 'Tiempo medio de las últimas semanas')}
+    <div class="barras">${lista.map((s) => `<div><span class="col"><i style="height:${(s.media / 5) * 100}%;background:${TIEMPOS[tiempoDe(s.media)].tinte}"></i></span><small>${fecha(s.lunes, { day: 'numeric', month: 'short' })}</small></div>`).join('')}</div>
+    <p class="texto-normal">${Math.abs(d) < 0.15 ? 'Esta semana va <strong>muy parecida</strong> a la anterior.' : `Esta semana va <strong>${d > 0 ? 'más despejada' : 'más cubierta'}</strong> que la anterior (${d > 0 ? '+' : '−'}${num(Math.abs(d))}).`}</p>
+    <p class="mini">Cada barra es la media de los partes de esa semana, de lunes a domingo. La semana en curso puede estar incompleta.</p>`);
+}
+
+function textoResumen(m, st) {
+  const con = m.mediasPorDiaSemana().filter((x) => x.dias > 0);
+  const mejor = con.reduce((a, b) => (b.media > a.media ? b : a), con[0]);
+  return `${casaDe(st.perfil)}: ${m.dias} partes, clima medio de ${TIEMPOS[tiempoDe(m.mediaGeneral ?? 3)].titulo.toLowerCase()}${mejor ? `, los ${SEMANA.plural[mejor.id]} como mejor día` : ''} y ${rayosDeEstado(st)} rayos. Lo firma Stormy.`;
+}
+
+function resumenCasa(m, st, abierto) {
+  return tarjeta(`${encabezado('resumen', 'Resumen de la casa', 'Para enseñarlo o compartirlo')}
+    <div class="resumen-casa">${avatarNimbo(64, true)}<p>${esc(textoResumen(m, st))}</p></div>
+    ${abierto ? `<button type="button" class="principal" data-accion="compartirResumen">${ICONOS.compartir}<span>Compartir resumen</span></button>` : ''}
+    <p class="mini">Con este mundo Stormy estrena corona. El resumen solo sale del móvil si lo compartes tú.</p>`);
+}
+
+const ICONOS_DETRAS = ['luna', 'libro', 'diana'];
+const desplegable = (titulo, html, { icono = null, abierto = false, id = '' } = {}) =>
+  `<details class="desplegable" ${abierto ? 'open' : ''} ${id ? `id="${id}"` : ''}><summary>${icono ? `<span class="marca">${ICONOS[icono]}</span>` : ''}<span>${titulo}</span><i aria-hidden="true">${ICONOS.derecha}</i></summary><div class="desplegable-cuerpo">${html}</div></details>`;
+
+function horoscopo(st) {
+  const perfil = st.perfil;
+  const hoy = hoyIso();
+  const luna = faseLunar(hoy);
+  const detras = `<h3 class="subtitulo">Qué hay detrás</h3>
+    ${HOROSCOPO_DETRAS.map(([t, x], i) => desplegable(t, `<p>${x}</p>`, { icono: ICONOS_DETRAS[i] })).join('')}
+    ${desplegable('Fuentes', fuentes(HOROSCOPO_DETRAS.flatMap(([, , f]) => f)), { icono: 'libro' })}`;
+  const lunaHoy = `<div class="tarjeta luna-hoy">${lunaSVG(luna, 84)}<div><p class="sobre">La luna de hoy (dato real)</p><h3>${luna.nombre}</h3>
+      <p class="nota sin-margen">Iluminada al ${Math.round(luna.iluminada * 100)} % (aprox.) · <a href="${ENLACE_LUNA}" target="_blank" rel="noopener noreferrer">Compruébalo</a></p></div></div>`;
+  if (!perfil.nacimiento) {
+    return `${tarjeta(`<p class="texto">¿Aciertan los astros? Quién sabe. Stormy los consulta por si acaso.</p>
+      <label class="linea"><span>Fecha de nacimiento</span><input type="date" id="nacimiento-nuevo" value="1992-06-15" max="${hoy}"></label>
+      <button type="button" class="principal con-margen" data-accion="guardarNacimiento">Añadir horóscopo</button>
+      <p class="mini">Es un juego: no es una predicción fiable y no entra en el pronóstico.</p>`)}
+      ${lunaHoy}${detras}`;
+  }
+  const h = horoscopoDe(perfil.nacimiento, hoy, luna);
+  return `<div class="signo-card"><span class="simbolo" aria-hidden="true">${h.signo.emoji}</span><div><h3>${h.signo.nombre}</h3><p>${h.signo.fechas} · signo de ${h.signo.elemento}</p></div></div>
+    ${lunaHoy}
+    <blockquote class="frase-dia"><p class="sobre">La frase de Stormy para hoy</p><p>${h.frase}</p></blockquote>
+    <p class="mini centro">Es un juego de Stormy, no una predicción fiable. No entra en el pronóstico.</p>
+    ${detras}`;
+}
+
+/** Esquema de hormonas a lo largo de un ciclo de 28 días de ejemplo, con la fase de hoy resaltada. */
+function graficoHormonas(faseHoy) {
+  const W = 320, H = 150, abajo = 128;
+  const x = (v) => 8 + v * (W - 16);
+  const y = (v) => abajo - v * 108;
+  const bandas = tramosCiclo(28).map((t) => `<rect x="${x((t.desde - 1) / 28).toFixed(1)}" y="14" width="${(((t.hasta - t.desde + 1) / 28) * (W - 16)).toFixed(1)}" height="${abajo - 14}" fill="${FASES_INFO[t.id].color}" opacity="${t.id === faseHoy ? 0.75 : 0.22}"/>`).join('');
+  const curvas = HORMONAS.map((h) => {
+    const pts = Array.from({ length: 81 }, (_, i) => `${x(i / 80).toFixed(1)},${y(h.valor(i / 80)).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${h.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }).join('');
+  const ejes = [[1, 'start'], [14, 'middle'], [28, 'end']].map(([d, ancla]) => `<text x="${x((d - 1) / 27).toFixed(1)}" y="${H - 6}" class="eje-txt" text-anchor="${ancla}">día ${d}</text>`).join('');
+  return `<div class="tarjeta hormonas"><h3>Cómo cambian las hormonas</h3>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Esquema aproximado de estrógenos, progesterona, LH y FSH a lo largo de un ciclo de 28 días">${bandas}${curvas}${ejes}</svg>
+    <p class="leyenda-hormonas">${HORMONAS.map((h) => `<span><i style="background:${h.color}"></i>${h.nombre}</span>`).join('')}</p>
+    <p class="mini">Esquema aproximado de un ciclo de 28 días: indica cuándo sube y baja cada hormona, no cantidades reales.${faseHoy ? ' La franja marcada es la fase de hoy.' : ''}</p></div>`;
+}
+
+/** «Conoce el ciclo»: rueda de fases, esquema de hormonas y un desplegable por fase. Tono formal y fuentes al pie. */
+function conoceCiclo(m) {
+  const faseHoy = m.fase(hoyIso());
+  const elegida = ui.hoja.fase ?? faseHoy;
+  const L = m.duracion;
+  const tramos = tramosCiclo(L);
+  const parte = (icono, titulo, texto) => `<div class="parte"><span class="marca">${ICONOS[icono]}</span><div><strong>${titulo}</strong><p>${texto}</p></div></div>`;
+  const fases = FASES.map((f) => {
+    const info = FASES_INFO[f.id];
+    const t = tramos.find((x) => x.id === f.id);
+    const dias = t ? ` · días ${t.desde}–${t.hasta}` : '';
+    return desplegable(`<i class="punto" style="background:${info.color}"></i>${f.titulo}${f.id === faseHoy ? ' <small class="hoy-chip">hoy</small>' : ''}<small>${dias}</small>`,
+      parte('libro', 'Qué es', info.que) + parte('calendario', 'Cuánto dura', info.dura) + parte('ciclo', 'Qué pasa en el cuerpo', info.cuerpo)
+      + parte('personas', 'Cada persona lo vive de forma distinta', info.distinto ?? CADA_PERSONA),
+      { abierto: f.id === elegida, id: `fase-${f.id}` });
+  }).join('');
+  const [, , fuentesConsulta] = FICHAS_CICLO[FICHAS_CICLO.length - 1];
+  const todas = [...new Map([...FASES.flatMap((f) => FASES_INFO[f.id].fuentes), ...fuentesConsulta].map((x) => [x[1], x])).values()];
+  return `<p class="aviso-sanitario">${AVISO_CICLO}</p>
+    <div class="tarjeta rueda-tarjeta">${ruedaCiclo(m, 220, { interactiva: true, elegida })}
+      <p class="mini centro">Ciclo de ${L} días. Toca una fase para ver su explicación.${m.diaCiclo(hoyIso()) ? ' El círculo blanco marca hoy (estimado).' : ''}</p></div>
+    ${graficoHormonas(faseHoy)}
+    <h3 class="subtitulo">Fase a fase</h3>
+    ${fases}
+    ${desplegable(FICHAS_CICLO[FICHAS_CICLO.length - 1][0], `<p>${FICHAS_CICLO[FICHAS_CICLO.length - 1][1]}</p>`, { icono: 'gota' })}
+    ${desplegable('Fuentes', fuentes(todas), { icono: 'libro' })}
+    <p class="aviso-sanitario">${AVISO_CICLO}</p>`;
+}
+
 // ---------- Ajustes ----------
 
-const enPantallaDeInicio = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
-
 function vistaAjustes() {
-  const p = estado.perfil;
+  const p = E().perfil;
   let instalar = '';
   if (!enPantallaDeInicio()) {
     instalar = `<h2 class="seccion">Instalar</h2><div class="tarjeta lista">${
       ui.instalar
         ? '<button type="button" class="enlace" data-accion="instalar">Instalar en este dispositivo</button>'
         : `<p class="nota">${esIOS()
-            ? 'En Safari, toca el botón Compartir y elige «Añadir a pantalla de inicio». Se abrirá como una app y funcionará sin conexión.'
+            ? enAppAjena()
+              ? 'Ábrelo en Safari: desde dentro de otra app no se puede instalar.'
+              : 'En Safari, toca el botón Compartir y elige «Añadir a pantalla de inicio». Se abrirá como una app y funcionará sin conexión.'
             : 'En el menú del navegador, elige «Instalar aplicación» o «Añadir a pantalla de inicio». Funcionará sin conexión.'}</p>`
     }</div>`;
   }
   return `<main class="pagina">
     <h1>Ajustes</h1>
-    <h2 class="seccion">Tu pareja</h2>
+    <h2 class="seccion">¿Con quién vives?</h2>
     <div class="tarjeta lista">
-      <label class="linea"><span>Nombre</span><input type="text" data-modelo="perfil.nombre" value="${esc(p.nombre)}" placeholder="Nombre" autocomplete="off" maxlength="30"></label>
-      ${interruptor('perfil.conNacimiento', !!p.nacimiento, 'Fecha de nacimiento')}
+      <div class="bloque">${eleccion('perfil.relacion', p.relacion, RELACIONES)}
+        ${p.relacion === 'familia' ? eleccion('perfil.parentesco', p.parentesco, PARENTESCOS, 'chips con-margen') : ''}</div>
+      <label class="linea"><span>¿Cómo le llamas en casa?</span><input type="text" data-modelo="perfil.apodo" value="${esc(p.apodo)}" placeholder="Mote" autocomplete="off" maxlength="30"></label>
+      <label class="linea"><span>¿Y a ti cómo te llaman?</span><input type="text" data-modelo="perfil.miApodo" value="${esc(p.miApodo)}" placeholder="Tu mote" autocomplete="off" maxlength="30"></label>
+      ${interruptor('perfil.conNacimiento', !!p.nacimiento, 'Su fecha de nacimiento (horóscopo)')}
       ${p.nacimiento ? `<label class="linea"><span>Nacimiento</span><input type="date" data-modelo="perfil.nacimiento" value="${p.nacimiento}" max="${hoyIso()}"></label>` : ''}
     </div>
+    <p class="pie-seccion">Mejor un mote que el nombre real. La relación cambia los textos y los consejos, no el cálculo.</p>
     <h2 class="seccion">Ciclo menstrual</h2>
     <div class="tarjeta lista">
-      ${interruptor('perfil.sigueCiclo', p.sigueCiclo, 'Tener en cuenta el ciclo')}
+      ${interruptor('perfil.sigueCiclo', p.sigueCiclo, 'Incluir el ciclo menstrual')}
       ${p.sigueCiclo ? `<label class="linea"><span>Última regla</span><input type="date" data-modelo="perfil.ultimaRegla" value="${p.ultimaRegla ?? hoyIso()}" max="${hoyIso()}"></label>
-      <div class="linea"><span>Duración: ${p.duracion} días</span>${paso('perfil.duracion', p.duracion)}</div>` : ''}
+      <div class="linea"><span>Duración: ${p.duracion} días</span>${paso('perfil.duracion')}</div>` : ''}
     </div>
-    <p class="pie-seccion">Opcional y solo si ella quiere compartirlo.</p>
+    <p class="pie-seccion">Opcional, y solo si le apetece compartirlo. Es un dato de salud: no sale de este dispositivo.</p>
     <h2 class="seccion">Recordatorio</h2>
     <div class="tarjeta lista">
       <label class="linea"><span>Hora del aviso</span><input type="time" data-modelo="perfil.horaAviso" value="${p.horaAviso}"></label>
-      <button type="button" class="enlace" data-accion="recordatorio">Añadir aviso diario al calendario</button>
-      <button type="button" class="enlace" data-accion="probarAviso">Probar aviso con opciones</button>
+      <button type="button" class="enlace" data-accion="recordatorio">Añadir alarma diaria al calendario</button>
+      <button type="button" class="enlace" data-accion="probarAviso">Probar el aviso</button>
     </div>
-    <p class="pie-seccion">Crea un evento diario con alarma y enlace a la app. Para quitarlo, bórralo desde tu calendario.</p>
+    <p class="pie-seccion">Dos toques: abres el aviso y eliges. La alarma es un evento diario de tu calendario con un enlace al registro; para quitarla, bórrala desde el calendario.</p>
     ${instalar}
+    <h2 class="seccion">Modo demostración</h2>
+    <div class="tarjeta lista">
+      <button type="button" class="enlace" data-accion="${demo ? 'salirDemo' : 'entrarDemo'}">${demo ? 'Salir del modo demostración' : 'Ver Stormy con datos de ejemplo'}</button>
+      <button type="button" class="enlace" data-accion="repetirRecorrido">Repetir el recorrido guiado</button>
+    </div>
+    <p class="pie-seccion">Enseña un mes de ejemplo sin tocar tus partes. Mientras lo ves, no se guarda nada.</p>
     <h2 class="seccion">Información</h2>
     <div class="tarjeta lista">
       <button type="button" class="enlace neutro" data-accion="verHistoria">La historia de Stormy<span>${ICONOS.derecha}</span></button>
@@ -474,16 +968,14 @@ function vistaAjustes() {
     </div>
     <h2 class="seccion">Tus datos</h2>
     <div class="tarjeta lista">
-      <button type="button" class="enlace" data-accion="exportar">Descargar una copia de mis datos</button>
-      <button type="button" class="enlace peligro" data-accion="pedirBorrarPartes">Borrar todos los partes</button>
-      <button type="button" class="enlace peligro" data-accion="pedirBorrarTodo">Borrar todo y volver a empezar</button>
+      <button type="button" class="enlace" data-accion="exportar">Guardar copia</button>
+      <button type="button" class="enlace" data-accion="recuperarCopia">Recuperar copia</button>
+      <button type="button" class="enlace" data-accion="verCodigo">Código de traspaso a otro móvil</button>
+      <button type="button" class="enlace" data-accion="pegarCodigo">Tengo un código de traspaso</button>
+      <button type="button" class="enlace peligro" data-accion="pedirBorrarPartes">Borrar mis partes</button>
+      <button type="button" class="enlace peligro" data-accion="pedirBorrarTodo">Borrar todo y empezar de cero</button>
     </div>
-    <h2 class="seccion">Zona de pruebas</h2>
-    <div class="tarjeta lista">
-      <button type="button" class="enlace" data-accion="sembrar" data-n="30">Cargar 30 días de ejemplo</button>
-      <button type="button" class="enlace" data-accion="sembrar" data-n="10">Cargar 10 días de ejemplo</button>
-    </div>
-    <p class="pie-seccion">Los datos de ejemplo sustituyen a los partes actuales.<br><br>${APP.nombre} 1.0 · Entretenimiento, no consejo médico.</p>
+    <p class="pie-seccion">Sin cuentas: la copia y el código los guardas tú, y Stormy no los envía a ningún sitio. Incluyen todo lo apuntado, también el ciclo si está activado.<br><br>${APP.nombre} ${APP.version} · Entretenimiento, no consejo médico.</p>
   </main>`;
 }
 
@@ -494,19 +986,69 @@ const HISTORIA = [
   ['Su lema', 'Las tormentas pasan. Lo importante es verlas venir juntos.'],
 ];
 const COMO = [
-  ['Un mes de observación', 'Stormy necesita 30 días de partes para buscar un patrón que se repita. Antes de eso, el pronóstico es genérico y lo marca con una fiabilidad baja.'],
-  ['Qué tiene en cuenta', 'Tu media personal, el día de la semana, la fase del ciclo (si la activáis) y la inercia de los últimos días. Los datos extra explican qué factores acompañan a los días buenos y malos.'],
-  ['Prudencia con pocos datos', 'Con pocos días, cada efecto se reduce a propósito para no sacar conclusiones de una casualidad. La fiabilidad sube con cada parte.'],
-  ['Cómo se mide el acierto', 'Al llegar a 30 días, Stormy predice cada día registrado sin mirarlo y lo compara con lo que apuntaste. Esa cifra es la que ves en Descubrimientos.'],
-  ['Lo que no es', 'No es ciencia médica ni una forma de adivinar a nadie. Es un juego para prestar más atención a quien tienes al lado. El horóscopo es solo una broma y no entra en el cálculo.'],
+  ['Qué se apunta', 'El ambiente de casa, no el ánimo de una persona: qué tiempo ha hecho hoy entre los que vivís juntos.'],
+  ['Primeros resultados', 'A los 7 días ya se ve el patrón semanal; a los 14, pronóstico a 3 días y factores; a los 30, la semana completa y la nota de acierto. Antes de eso el pronóstico es genérico y lo marca con una fiabilidad baja.'],
+  ['Qué tiene en cuenta', 'La media de la casa, el día de la semana, lo que apuntes en «qué toca mañana», la fase del ciclo (si la activáis) y la inercia de los últimos días. Los datos extra explican qué acompaña a los días buenos y malos.'],
+  ['Prudencia con pocos datos', 'Con pocos días, cada efecto se reduce a propósito para no sacar conclusiones de una casualidad. Los días apuntados de memoria pesan la mitad.'],
+  ['Luna, luz y estación', 'Stormy los calcula solo y los compara con vuestros partes. Solo los enseña si se ve alguna diferencia, y no entran en el pronóstico.'],
+  ['Rayos y niveles', 'Son la parte de juego. Los rayos se acumulan y no cambian el pronóstico; los niveles dependen solo de cuántos días llevéis apuntados.'],
+  ['Lo que no es', 'No es ciencia médica ni una forma de adivinar a nadie. Es un juego para prestar más atención a lo que pasa en casa. El horóscopo es un juego aparte y no entra en el cálculo.'],
 ];
 const PRIVACIDAD = [
   ['Todo se queda en tu dispositivo', 'No hay cuentas, servidores ni publicidad. Los datos se guardan en este navegador y no salen de él.'],
-  ['Con su consentimiento', 'Los partes hablan de tu pareja. Úsala solo si ella lo sabe y le parece bien; si cambia de opinión, borra los datos desde Ajustes.'],
-  ['El ciclo es opcional', 'Solo se usa si ella quiere compartirlo. Puedes desactivarlo en cualquier momento.'],
-  ['Copia y borrado', 'Puedes descargar una copia de tus datos o borrarlo todo de forma definitiva desde Ajustes. Si borras los datos del navegador, también se pierden.'],
-  ['Entretenimiento', 'No es una herramienta médica ni psicológica y no sustituye a hablar con tu pareja.'],
+  ['Es cosa de dos', 'Los partes hablan del ambiente de la casa que compartís. Usad Stormy solo si lo habéis hablado y os apetece a los dos; si alguien cambia de opinión, los datos se borran desde Ajustes.'],
+  ['El ciclo es opcional y no sale de aquí', 'Es un dato de salud de otra persona: solo se usa si le apetece compartirlo, se puede quitar en cualquier momento y nunca se envía a ningún servidor. Sí va dentro de la copia que guardas tú.'],
+  ['Copia, traspaso y borrado', 'Puedes guardar una copia, pasar tus datos a otro móvil con un código y borrarlo todo de forma definitiva desde Ajustes. Si borras los datos del navegador sin copia, se pierden.'],
+  ['Entretenimiento', 'No es una herramienta médica ni psicológica y no sustituye a hablar en casa.'],
 ];
+
+// ---------- Recorrido guiado ----------
+
+const RECORRIDO = [
+  ['[data-guia="registrar"]', 'Registrar', 'Aquí apuntas el parte de cada día. Un toque y queda guardado.'],
+  ['[data-guia="progreso"]', 'Progreso', 'Cada día apuntado llena los anillos. Aquí ves cuánto falta para el siguiente premio.'],
+  ['#nimbo', 'Stormy', 'Aquí estoy yo. Pregúntame por hoy, por mañana o por lo que influye en casa.'],
+];
+
+function pintaGuia() {
+  const cont = $('#guia');
+  const objetivo = ui.recorrido == null ? null : $(RECORRIDO[ui.recorrido][0]);
+  if (!objetivo) {
+    cont.innerHTML = '';
+    cont.hidden = true;
+    return;
+  }
+  const [, titulo, texto] = RECORRIDO[ui.recorrido];
+  const r = objetivo.getBoundingClientRect();
+  const ultimo = ui.recorrido === RECORRIDO.length - 1;
+  const abajo = r.top + r.height / 2 < innerHeight / 2;
+  const ancho = Math.min(300, innerWidth - 32);
+  const izq = Math.min(Math.max(16, r.left + r.width / 2 - ancho / 2), innerWidth - ancho - 16);
+  cont.hidden = false;
+  cont.innerHTML = `<div class="foco" style="top:${r.top - 6}px;left:${r.left - 6}px;width:${r.width + 12}px;height:${r.height + 12}px"></div>
+    <div class="globo ${abajo ? 'abajo' : 'arriba'}" role="dialog" aria-label="Recorrido guiado, paso ${ui.recorrido + 1} de ${RECORRIDO.length}"
+      style="width:${ancho}px;left:${izq}px;${abajo ? `top:${r.bottom + 20}px` : `bottom:${innerHeight - r.top + 20}px`}">
+      <span class="pico" style="left:${Math.min(Math.max(18, r.left + r.width / 2 - izq - 9), ancho - 36)}px"></span>
+      <small>${ui.recorrido + 1} de ${RECORRIDO.length}</small><h3>${titulo}</h3><p>${texto}</p>
+      <div><button type="button" class="texto-boton" data-accion="saltarRecorrido">Saltar</button><button type="button" class="principal" data-accion="siguienteRecorrido">${ultimo ? 'Entendido' : 'Siguiente'}</button></div>
+    </div>`;
+  cont.querySelector('.principal').focus({ preventScroll: true });
+}
+
+function empiezaRecorrido() {
+  ui.pestana = 'hoy';
+  ui.recorrido = 0;
+  pinta({ arriba: true });
+}
+
+function terminaRecorrido() {
+  ui.recorrido = null;
+  if (!demo && !real.perfil.recorrido) {
+    real.perfil.recorrido = true;
+    salva();
+  }
+  pintaGuia();
+}
 
 // ---------- Pintado ----------
 
@@ -516,38 +1058,72 @@ const PESTANAS = [['hoy', 'Hoy', 'hoy'], ['calendario', 'Calendario', 'calendari
 function pinta({ arriba = false } = {}) {
   const vista = $('#vista');
   const y = arriba ? 0 : scrollY;
-  const alta = estado.perfil.alta;
+  const st = E();
+  const alta = st.perfil.alta;
   if (!VISTAS[ui.pestana]) ui.pestana = 'hoy';
+  const animaCalendario = alta && ui.pestana === 'calendario' && !ui.hoja && ui.recien;
   vista.innerHTML = alta ? VISTAS[ui.pestana]() : bienvenida();
+  if (animaCalendario) ui.recien = null;
 
   // Cada estado es un campo de color plano; el texto va en tinta, salvo sobre la tormenta.
   let campo = null;
-  if (!alta) campo = TIEMPOS[4];
+  if (!alta) campo = TIEMPOS[ui.pasoPintado === 'presentacion' ? 1 : 4];
   else if (ui.pestana === 'hoy') {
     const hoy = hoyIso();
-    campo = TIEMPOS[estado.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo];
+    campo = TIEMPOS[st.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo];
   }
+  pintaFondo(alta && ui.pestana === 'hoy' ? campo?.id ?? null : null);
   document.body.classList.toggle('con-cielo', !!campo);
-  document.body.classList.toggle('cielo-oscuro', campo?.sobre === '#FFFFFF');
+  // En modo oscuro cada tiempo usa una versión honda de su color, con texto claro.
+  const oscuro = matchMedia('(prefers-color-scheme: dark)').matches;
+  const sobre = campo ? (oscuro ? '#F4F2FB' : campo.sobre) : null;
+  document.body.classList.toggle('cielo-oscuro', !!sobre && sobre !== '#1E2749');
+  document.body.classList.toggle('en-demo', !!demo);
   if (campo) {
-    const c = campo.cielo;
+    const c = oscuro ? campo.cieloOscuro : campo.cielo;
     document.body.style.setProperty('--cielo', `linear-gradient(${c[0]}, ${c[1]} 55%, ${c[2]})`);
-    document.body.style.setProperty('--sobre', campo.sobre);
+    document.body.style.setProperty('--sobre', sobre);
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', c[0]);
   } else {
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', matchMedia('(prefers-color-scheme: dark)').matches ? '#12152B' : '#F6F4FB');
   }
 
+  $('#franja').hidden = !demo;
   $('#barra').innerHTML = alta
     ? PESTANAS.map(([id, nombre, icono]) => `<button type="button" class="${ui.pestana === id ? 'on' : ''}" ${ui.pestana === id ? 'aria-current="page"' : ''} data-accion="pestana" data-id="${id}">${ICONOS[icono]}<span>${nombre}</span></button>`).join('')
     : '';
   $('#barra').hidden = !alta;
-  $('#nimbo').innerHTML = alta ? avatarNimbo(58) : '';
+  $('#nimbo').innerHTML = alta ? avatarNimbo(52, stormyEspecial()) : '';
   $('#nimbo').hidden = !alta;
   scrollTo(0, y);
+  pintaGuia();
 }
 
-const HOJAS = { registro: hojaRegistro, niveles: hojaNiveles, nivel: hojaNivelNuevo, confirmar: hojaConfirmar, texto: hojaTexto, nimbo: hojaNimbo };
+// Detalle animado de fondo en «Hoy», propio de cada tiempo. Solo transform y opacidad; se repinta solo si cambia el tiempo.
+const FONDOS = {
+  5: () => '<svg class="rayos-sol" viewBox="0 0 200 200" aria-hidden="true">' + Array.from({ length: 12 }, (_, i) => `<path d="M100 100L${(100 + 140 * Math.cos(((i * 30 - 4) * Math.PI) / 180)).toFixed(1)} ${(100 + 140 * Math.sin(((i * 30 - 4) * Math.PI) / 180)).toFixed(1)}L${(100 + 140 * Math.cos(((i * 30 + 4) * Math.PI) / 180)).toFixed(1)} ${(100 + 140 * Math.sin(((i * 30 + 4) * Math.PI) / 180)).toFixed(1)}Z"/>`).join('') + '</svg>',
+  4: () => `<span class="nube-fondo pasa">${nubeSuelta(150)}</span>`,
+  3: () => `<span class="nube-fondo lenta n1">${nubeSuelta(170)}</span><span class="nube-fondo lenta n2">${nubeSuelta(120)}</span><span class="nube-fondo lenta n3">${nubeSuelta(140)}</span>`,
+  2: () => Array.from({ length: 14 }, (_, i) => `<i class="gota" style="left:${(i * 7.3 + 3) % 100}%;animation-delay:${((i * 0.37) % 1.4).toFixed(2)}s;animation-duration:${(1.1 + (i % 4) * 0.15).toFixed(2)}s"></i>`).join(''),
+  1: () => '<span class="destello-fondo"></span>' + Array.from({ length: 10 }, (_, i) => `<i class="gota" style="left:${(i * 10.7 + 5) % 100}%;animation-delay:${((i * 0.29) % 1.2).toFixed(2)}s"></i>`).join(''),
+};
+let fondoPintado;
+function pintaFondo(tiempo) {
+  if (fondoPintado === tiempo) return;
+  fondoPintado = tiempo;
+  const capa = $('#fondo');
+  capa.className = tiempo ? `fondo-${tiempo}` : '';
+  capa.innerHTML = tiempo ? FONDOS[tiempo]() : '';
+}
+
+const HOJAS = {
+  registro: hojaRegistro, niveles: hojaNiveles, nivel: hojaNivelNuevo, confirmar: hojaConfirmar, texto: hojaTexto, nimbo: hojaNimbo,
+  recuperar: hojaRecuperar, tema: hojaTema, codigo: hojaCodigo, aviso: hojaAviso,
+};
+const TITULOS_HOJA = {
+  registro: 'Registrar el parte', niveles: 'Niveles', nivel: 'Nivel desbloqueado', confirmar: 'Confirmación', texto: 'Información',
+  nimbo: 'Hablar con Stormy', recuperar: 'Días sin apuntar', tema: 'Descubrimiento', codigo: 'Código de traspaso', aviso: 'Recordatorio',
+};
 
 function pintaHoja(nueva = false) {
   const cont = $('#hoja');
@@ -557,11 +1133,11 @@ function pintaHoja(nueva = false) {
     return;
   }
   const previo = cont.querySelector('.hoja-cuerpo')?.scrollTop ?? 0;
-  const baja = ['nivel', 'confirmar'].includes(ui.hoja.tipo);
+  const baja = ['nivel', 'confirmar', 'recuperar', 'aviso'].includes(ui.hoja.tipo);
   // El chat de Stormy es una ventana pequeña y flotante, no una hoja a pantalla completa.
   const chat = ui.hoja.tipo === 'nimbo';
   cont.innerHTML = `<div class="velo ${chat ? 'suave' : ''} ${nueva ? 'entra' : ''}" data-accion="cerrarHoja"></div>
-    <section class="hoja ${baja ? 'baja' : ''} ${chat ? 'flotante' : ''} ${nueva ? 'entra' : ''}" role="dialog" aria-modal="true">${HOJAS[ui.hoja.tipo]()}</section>`;
+    <section class="hoja ${baja ? 'baja' : ''} ${chat ? 'flotante' : ''} ${nueva ? 'entra' : ''}" role="dialog" aria-modal="true" aria-label="${TITULOS_HOJA[ui.hoja.tipo]}" tabindex="-1">${HOJAS[ui.hoja.tipo]()}</section>`;
   document.body.classList.add('con-hoja');
   const cuerpo = cont.querySelector('.hoja-cuerpo');
   if (cuerpo && !nueva) cuerpo.scrollTop = previo;
@@ -580,8 +1156,9 @@ function avisa(texto) {
   t.textContent = texto;
   t.classList.add('on');
   clearTimeout(avisoTemporal);
-  avisoTemporal = setTimeout(() => t.classList.remove('on'), 2600);
+  avisoTemporal = setTimeout(() => t.classList.remove('on'), 2800);
 }
+const avisaDemo = () => avisa('Datos de ejemplo: aquí no se guarda nada');
 
 function descarga(nombre, tipo, contenido) {
   const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
@@ -590,6 +1167,15 @@ function descarga(nombre, tipo, contenido) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function copia(texto, hecho) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    avisa(hecho);
+  } catch {
+    avisa('No se ha podido copiar: selecciona el texto y cópialo a mano');
+  }
 }
 
 /** Evento diario con alarma para el calendario del dispositivo: recordatorio sin servidor. */
@@ -602,40 +1188,79 @@ function recordatorioICS(hora) {
   return [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Stormy//Recordatorio//ES', 'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT', 'UID:parte-diario@stormy', `DTSTAMP:${sello}`, `DTSTART:${hoy}T${h}${min}00`, 'DURATION:PT5M',
-    'RRULE:FREQ=DAILY', 'SUMMARY:¿Qué tiempo hace hoy en casa?', `DESCRIPTION:Registra el parte de hoy en 5 segundos: ${url}`, `URL:${url}`,
-    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:¿Qué tiempo hace hoy en casa?', 'TRIGGER:PT0M', 'END:VALARM',
+    'RRULE:FREQ=DAILY', 'SUMMARY:¿Qué tiempo ha hecho hoy en casa?', `DESCRIPTION:Dos toques: abres el enlace y eliges. ${url}`, `URL:${url}`,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:¿Qué tiempo ha hecho hoy en casa?', 'TRIGGER:PT0M', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR',
   ].join('\r\n');
+}
+
+/** Sustituye los datos del dispositivo por una copia ya validada, tras confirmarlo. */
+function proponeCopia(estado) {
+  ui.copiaPendiente = estado;
+  const n = Object.keys(estado.entradas).length;
+  const actuales = Object.keys(real.entradas).length;
+  abreHoja({
+    tipo: 'confirmar', titulo: '¿Recuperar estos datos?',
+    texto: `La copia trae ${n === 1 ? '1 parte' : `${n} partes`} y sustituye lo que hay ahora en este dispositivo (${actuales === 1 ? '1 parte' : `${actuales} partes`}). No se puede deshacer.`,
+    boton: 'Recuperar', accion: 'aplicarCopia',
+  });
 }
 
 // ---------- Acciones ----------
 
 const acciones = {
   siguiente() {
-    if (ui.paso === 1 && !ui.alta.consiente) return;
-    ui.paso = Math.min(PASOS - 1, ui.paso + 1);
+    const id = pasosAlta()[ui.paso];
+    if ((id === 'juego' && !ui.alta.consiente) || (id === 'quien' && !ui.alta.relacion)) return;
+    ui.paso++;
     pinta({ arriba: true });
   },
   atras() {
     ui.paso = Math.max(0, ui.paso - 1);
     pinta({ arriba: true });
   },
-  terminar(d) {
+  async terminar(d) {
     const a = ui.alta;
-    Object.assign(estado.perfil, {
-      nombre: a.nombre.trim(), nacimiento: a.conNacimiento ? a.nacimiento : null, sigueCiclo: a.sigueCiclo,
-      duracion: a.duracion, ultimaRegla: a.sigueCiclo ? a.ultimaRegla : null, consentimiento: hoyIso(), horaAviso: a.hora, alta: true,
+    let permiso = null;
+    if (d.aviso) {
+      // El permiso se pide aquí, con el toque de la persona; el aviso diario en sí va por el calendario (ver avisos.js).
+      permiso = await pidePermiso().catch(() => 'no-disponible');
+    }
+    const conCiclo = a.relacion === 'pareja' && a.sigueCiclo;
+    Object.assign(real.perfil, {
+      apodo: a.apodo.trim(), miApodo: a.miApodo.trim(), relacion: a.relacion ?? 'pareja',
+      parentesco: a.relacion === 'familia' ? a.parentesco : null,
+      nacimiento: a.conNacimiento ? a.nacimiento : null, sigueCiclo: conCiclo,
+      duracion: a.duracion, ultimaRegla: conCiclo ? a.ultimaRegla : null, consentimiento: hoyIso(), horaAviso: a.hora, alta: true, recorrido: false,
     });
-    guardar(estado);
-    if (d.aviso) descarga('stormy-recordatorio.ics', 'text/calendar', recordatorioICS(a.hora));
+    guardar(real);
     ui.pestana = 'hoy';
     pinta({ arriba: true });
+    if (d.aviso) abreHoja({ tipo: 'aviso', permiso, alCerrar: empiezaRecorrido });
+    else empiezaRecorrido();
   },
   pasoNumero(d) {
     const [raiz, campo] = d.modelo.split('.');
-    const destino = raiz === 'alta' ? ui.alta : estado.perfil;
+    if (raiz === 'perfil' && demo) return avisaDemo();
+    const destino = raiz === 'alta' ? ui.alta : real.perfil;
     destino[campo] = Math.min(40, Math.max(21, destino[campo] + Number(d.d)));
-    if (raiz === 'perfil') guardar(estado);
+    if (raiz === 'perfil') salva();
+    pinta();
+  },
+  /** Elección única: relación, parentesco y los datos extra de tres opciones. Tocar la elegida la quita (salvo la relación). */
+  elige(d) {
+    const [raiz, campo] = d.modelo.split('.');
+    const v = /^\d+$/.test(d.v) ? Number(d.v) : d.v;
+    if (raiz === 'borrador') {
+      ui.borrador[campo] = ui.borrador[campo] === v ? null : v;
+      guardaBorrador();
+      return pintaHoja();
+    }
+    if (raiz === 'perfil' && demo) return avisaDemo();
+    const destino = raiz === 'alta' ? ui.alta : real.perfil;
+    destino[campo] = v;
+    if (campo === 'relacion' && v !== 'familia') destino.parentesco = null;
+    if (raiz === 'perfil') salva();
     pinta();
   },
   pestana(d) {
@@ -644,19 +1269,32 @@ const acciones = {
     pinta({ arriba: cambia });
   },
   abrirRegistro(d) {
+    if (demo) return avisaDemo();
     const dia = d.dia || hoyIso();
-    const e = estado.entradas[dia];
-    ui.borrador = { dia, animo: e?.animo ?? null, sueno: e?.sueno ?? null, estres: e?.estres ?? null, etiquetas: [...(e?.etiquetas ?? [])], regla: !!e?.regla, nota: e?.nota ?? '', existia: !!e };
+    const e = real.entradas[dia];
+    ui.borrador = { ...entradaVacia(), ...e, etiquetas: [...(e?.etiquetas ?? [])], dia, reaccion: null, premio: 0 };
     abreHoja({ tipo: 'registro' });
   },
   elegirTiempo(d) {
-    ui.borrador.animo = Number(d.t);
+    const b = ui.borrador;
+    if (!b || demo) return;
+    const nuevo = !real.entradas[b.dia];
+    const antes = nivelActual(diasRegistrados());
+    b.animo = Number(d.t);
+    // Un día que se apunta más tarde va «de memoria»: cuenta para los niveles y pesa la mitad en el cálculo.
+    if (nuevo) b.orientativo = b.dia < hoyIso();
+    guardaBorrador();
+    if (nuevo) {
+      const total = diasRegistrados();
+      const semana = total % 7 === 0;
+      b.reaccion = `${reaccion(b.animo, total)}${semana ? ' Y con este cierras un bloque de 7 partes: premio semanal.' : ''}`;
+      b.premio = RAYOS.parte + (semana ? RAYOS.semana : 0);
+      const despues = nivelActual(total);
+      if (despues.id !== antes.id) ui.nivelPendiente = despues;
+      ui.recien = { dia: b.dia, ...cierres(b.dia) };
+    }
     navigator.vibrate?.(8);
-    pintaHoja();
-  },
-  triple(d) {
-    const v = Number(d.v);
-    ui.borrador[d.campo] = ui.borrador[d.campo] === v ? null : v;
+    pinta();
     pintaHoja();
   },
   etiqueta(d) {
@@ -664,30 +1302,78 @@ const acciones = {
     const i = lista.indexOf(d.e);
     if (i >= 0) lista.splice(i, 1);
     else lista.push(d.e);
+    guardaBorrador();
     pintaHoja();
   },
-  guardarParte() {
-    const b = ui.borrador;
-    if (!b?.animo) return;
+  recuperaDia(d) {
+    const h = ui.hoja;
+    const t = Number(d.t);
+    if (h.elegidos[d.dia] === t) delete h.elegidos[d.dia];
+    else h.elegidos[d.dia] = t;
+    h.todos = null;
+    pintaHoja();
+  },
+  recuperaTodos(d) {
+    const h = ui.hoja;
+    h.todos = Number(d.t);
+    for (const dia of h.dias) h.elegidos[dia] = h.todos;
+    pintaHoja();
+  },
+  recuperaGuardar() {
+    const h = ui.hoja;
+    if (demo || h?.tipo !== 'recuperar') return;
+    const hoy = hoyIso();
     const antes = nivelActual(diasRegistrados());
-    estado.entradas[b.dia] = { animo: b.animo, sueno: b.sueno, estres: b.estres, etiquetas: ETIQUETAS.filter((e) => b.etiquetas.includes(e)), nota: b.nota.trim(), regla: b.regla };
-    if (b.regla && (!estado.perfil.ultimaRegla || b.dia > estado.perfil.ultimaRegla)) estado.perfil.ultimaRegla = b.dia;
-    const ok = guardar(estado);
+    const nuevos = Object.entries(h.elegidos).filter(([dia]) => !real.entradas[dia]);
+    for (const [dia, animo] of nuevos) real.entradas[dia] = { ...entradaVacia(), animo, orientativo: dia < hoy };
+    const ok = salva();
     const despues = nivelActual(diasRegistrados());
-    ui.borrador = null;
     ui.hoja = null;
-    pinta({ arriba: ui.pestana === 'hoy' });
+    pinta();
     if (despues.id !== antes.id) abreHoja({ tipo: 'nivel', nivel: despues });
     else pintaHoja();
-    if (!ok) avisa('No se ha podido guardar en este navegador');
+    avisa(ok ? `${nuevos.length === 1 ? 'Apuntado 1 día' : `Apuntados ${nuevos.length} días`} · +${nuevos.length * RAYOS.parte} rayos` : 'No se ha podido guardar en este navegador');
   },
   cerrarHoja() {
+    const cerrada = ui.hoja;
     ui.hoja = null;
     ui.borrador = null;
+    ui.copiaPendiente = null;
+    if (cerrada?.tipo === 'registro') {
+      pinta();
+      if (ui.nivelPendiente) {
+        const nivel = ui.nivelPendiente;
+        ui.nivelPendiente = null;
+        return abreHoja({ tipo: 'nivel', nivel });
+      }
+    }
     pintaHoja();
+    if (cerrada?.tipo === 'nivel' && ui.pestana === 'calendario') pinta();
+    cerrada?.alCerrar?.();
   },
   abrirNiveles() {
     abreHoja({ tipo: 'niveles' });
+  },
+  abrirTema(d) {
+    abreHoja({ tipo: 'tema', id: d.id });
+  },
+  faseCiclo(d) {
+    if (ui.hoja?.tipo !== 'tema') return;
+    ui.hoja.fase = d.id;
+    pintaHoja();
+    document.getElementById(`fase-${d.id}`)?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  },
+  abrirHoroscopo() {
+    abreHoja({ tipo: 'tema', id: 'horoscopo' });
+  },
+  guardarNacimiento() {
+    if (demo) return avisaDemo();
+    const valor = $('#nacimiento-nuevo')?.value;
+    if (!valor) return;
+    real.perfil.nacimiento = valor;
+    salva();
+    pinta();
+    pintaHoja();
   },
   abrirNimbo() {
     if (!ui.chat.length) ui.chat.push({ de: 'nimbo', texto: saludo(contextoNimbo()) });
@@ -700,7 +1386,7 @@ const acciones = {
     const [a, m] = ui.mes.split('-').map(Number);
     const f = new Date(Date.UTC(a, m - 1 + Number(d.d), 1));
     const nuevo = f.toISOString().slice(0, 7);
-    if (nuevo > hoyIso().slice(0, 7)) return;
+    if (nuevo > mesMaximo()) return;
     ui.mes = nuevo;
     pinta();
   },
@@ -713,6 +1399,33 @@ const acciones = {
   verPrivacidad() {
     abreHoja({ tipo: 'texto', titulo: 'Privacidad', bloques: PRIVACIDAD });
   },
+  siguienteRecorrido() {
+    if (ui.recorrido >= RECORRIDO.length - 1) return terminaRecorrido();
+    ui.recorrido++;
+    pintaGuia();
+  },
+  saltarRecorrido() {
+    terminaRecorrido();
+  },
+  repetirRecorrido() {
+    empiezaRecorrido();
+  },
+  entrarDemo() {
+    demo = ejemplo(30, real.perfil);
+    Object.assign(ui, { pestana: 'hoy', chat: [], muestra: null, mes: hoyIso().slice(0, 7) });
+    pinta({ arriba: true });
+  },
+  salirDemo() {
+    demo = null;
+    const q = new URLSearchParams(location.search);
+    if (q.has('demo')) {
+      q.delete('demo');
+      history.replaceState(null, '', location.pathname + (q.size ? `?${q}` : ''));
+    }
+    Object.assign(ui, { pestana: real.perfil.alta ? 'ajustes' : 'hoy', hoja: null, chat: [], muestra: null, recorrido: null });
+    pintaHoja();
+    pinta({ arriba: true });
+  },
   async probarAviso() {
     const antes = capacidad();
     let r;
@@ -723,12 +1436,13 @@ const acciones = {
     }
     const bloques = [];
     if (r.ok) {
-      bloques.push(['Aviso enviado', 'Bloquea el móvil y míralo en la pantalla de bloqueo, o baja el centro de notificaciones. Si ves las opciones, elige una y vuelve a abrir Stormy: el parte de hoy debe quedar apuntado.']);
+      bloques.push(['Aviso enviado', 'Bloquea el móvil y míralo en la pantalla de bloqueo, o baja el centro de notificaciones. Tócalo y elige: son dos toques. Si tu móvil enseña opciones dentro del aviso, también puedes elegir ahí.']);
       bloques.push(['Botones que admite este dispositivo', r.botones >= 5
         ? `Admite ${r.botones}: caben las cinco opciones.`
         : r.botones > 0
           ? `Admite ${r.botones}. Verás solo las ${r.botones} primeras opciones; para el resto, toca el aviso y se abre el registro.`
-          : 'Este sistema no declara botones en los avisos web. Si no aparecen opciones, al tocar el aviso se abrirá el registro para elegir.']);
+          : 'Este sistema no enseña botones en los avisos web: al tocar el aviso se abre el registro para elegir.']);
+      bloques.push(['Es solo una prueba', 'Este aviso lo has lanzado tú ahora. El recordatorio de cada día va por la alarma del calendario.']);
     } else if (r.motivo === 'sin-soporte') {
       bloques.push(['Este navegador no admite avisos', esIOS() && !antes.instalada
         ? 'En iPhone, los avisos solo funcionan si antes añades Stormy a la pantalla de inicio (botón Compartir → «Añadir a pantalla de inicio») y la abres desde su icono.'
@@ -736,39 +1450,73 @@ const acciones = {
     } else if (r.motivo === 'denegado') {
       bloques.push(['Avisos desactivados', 'Has rechazado los avisos de Stormy. Actívalos en los ajustes del móvil o del navegador y vuelve a probar.']);
     } else {
-      bloques.push(['No se ha podido mostrar el aviso', r.detalle ?? 'Error desconocido.']);
+      bloques.push(['No se ha podido mostrar el aviso', esc(r.detalle ?? 'Error desconocido.')]);
     }
     bloques.push(['Datos técnicos', `Instalada: ${antes.instalada ? 'sí' : 'no'} · Permiso: ${capacidad().permiso} · Botones declarados: ${antes.botones}`]);
     abreHoja({ tipo: 'texto', titulo: 'Prueba de aviso', bloques });
   },
-  recordatorio() {
-    descarga('stormy-recordatorio.ics', 'text/calendar', recordatorioICS(estado.perfil.horaAviso));
+  recordatorio(d) {
+    descarga('stormy-recordatorio.ics', 'text/calendar', recordatorioICS(real.perfil.horaAviso));
+    if (d.cierra) acciones.cerrarHoja();
     avisa('Abre el archivo para añadirlo a tu calendario');
   },
   exportar() {
-    descarga(`stormy-${hoyIso()}.json`, 'application/json', JSON.stringify(estado, null, 2));
+    descarga(`stormy-${hoyIso()}.json`, 'application/json', aCopia(real));
+    avisa('Copia guardada en tus descargas');
   },
-  sembrar(d) {
-    guardar(sembrar(estado, Number(d.n)));
-    avisa(`Cargados ${d.n} días de ejemplo`);
-    pinta();
+  recuperarCopia() {
+    if (demo) return avisaDemo();
+    $('#fichero').click();
+  },
+  verCodigo() {
+    abreHoja({ tipo: 'codigo', modo: 'ver' });
+  },
+  pegarCodigo() {
+    if (demo) return avisaDemo();
+    abreHoja({ tipo: 'codigo', modo: 'pegar' });
+  },
+  copiarCodigo() {
+    copia($('#codigo').value, 'Código copiado');
+  },
+  usarCodigo() {
+    try {
+      proponeCopia(deCodigo($('#codigo').value));
+    } catch {
+      avisa('Ese código no es de Stormy o está incompleto');
+    }
+  },
+  aplicarCopia() {
+    if (!ui.copiaPendiente || demo) return;
+    real = ui.copiaPendiente;
+    const ok = guardar(real);
+    Object.assign(ui, { hoja: null, copiaPendiente: null, chat: [], muestra: null, pestana: 'hoy', paso: 0 });
+    pintaHoja();
+    pinta({ arriba: true });
+    avisa(ok ? 'Datos recuperados' : 'No se ha podido guardar en este navegador');
+  },
+  copiarEnlace() {
+    copia(location.origin + location.pathname, 'Enlace copiado. Pégalo en Safari');
   },
   pedirBorrarPartes() {
-    abreHoja({ tipo: 'confirmar', titulo: '¿Borrar todos los partes?', texto: 'Se perderá el progreso de niveles. No se puede deshacer.', boton: 'Borrar partes', accion: 'borrarPartes' });
+    if (demo) return avisaDemo();
+    abreHoja({ tipo: 'confirmar', titulo: '¿Borrar mis partes?', texto: 'Se borran todos los días apuntados y el progreso de niveles. La configuración se queda. No se puede deshacer.', boton: 'Borrar partes', accion: 'borrarPartes' });
   },
   pedirBorrarTodo() {
+    if (demo) return avisaDemo();
     abreHoja({ tipo: 'confirmar', titulo: '¿Borrar todo?', texto: 'Se borran los partes y la configuración, y la app vuelve a la bienvenida. No se puede deshacer.', boton: 'Borrar todo', accion: 'borrarTodo' });
   },
   borrarPartes() {
-    estado.entradas = {};
-    guardar(estado);
+    if (demo) return;
+    real.entradas = {};
+    salva();
     ui.hoja = null;
     pintaHoja();
     pinta();
   },
   borrarTodo() {
-    estado = borrarTodo();
-    Object.assign(ui, { hoja: null, paso: 0, pestana: 'hoy' });
+    if (demo) return;
+    real = borrarTodo();
+    Object.assign(ui, { hoja: null, paso: 0, pasoPintado: null, pestana: 'hoy', chat: [], muestra: null });
     ui.alta.consiente = false;
     pintaHoja();
     pinta({ arriba: true });
@@ -781,21 +1529,26 @@ const acciones = {
     pinta();
   },
   async compartir() {
+    const st = E();
     const hoy = hoyIso();
-    const t = estado.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo;
-    const texto = `${estado.entradas[hoy] ? 'Hoy en casa' : 'Previsión de hoy en casa'}: ${TIEMPOS[t].emoji} ${TIEMPOS[t].titulo.toLowerCase()}. ${consejoDe(t, hoy)}`;
-    const url = location.origin + location.pathname;
-    try {
-      if (navigator.share) await navigator.share({ title: APP.nombre, text: texto, url });
-      else {
-        await navigator.clipboard.writeText(`${texto} ${url}`);
-        avisa('Copiado. Pégalo donde quieras');
-      }
-    } catch {
-      /* el usuario canceló */
-    }
+    const t = st.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo;
+    const texto = `${st.entradas[hoy] ? 'Hoy en casa' : 'Previsión de hoy en casa'}: ${TIEMPOS[t].emoji} ${TIEMPOS[t].titulo.toLowerCase()}. ${consejoDe(t, hoy, st.perfil.relacion)}`;
+    await comparte(texto);
+  },
+  async compartirResumen() {
+    await comparte(textoResumen(motor(), E()));
   },
 };
+
+async function comparte(texto) {
+  const url = location.origin + location.pathname;
+  try {
+    if (navigator.share) await navigator.share({ title: APP.nombre, text: texto, url });
+    else await copia(`${texto} ${url}`, 'Copiado. Pégalo donde quieras');
+  } catch {
+    /* el usuario canceló */
+  }
+}
 
 // ---------- Eventos ----------
 
@@ -818,20 +1571,38 @@ function alCambiar(ev) {
     if (casilla) pinta();
   } else if (raiz === 'borrador') {
     ui.borrador[campo] = valor;
+    guardaBorrador();
     if (casilla) pintaHoja();
   } else if (raiz === 'perfil') {
-    const p = estado.perfil;
+    if (demo) {
+      avisaDemo();
+      return pinta();
+    }
+    const p = real.perfil;
     if (campo === 'conNacimiento') p.nacimiento = valor ? '1992-06-15' : null;
     else if (campo === 'sigueCiclo') {
       p.sigueCiclo = valor;
       if (valor && !p.ultimaRegla) p.ultimaRegla = hoyIso();
     } else if (!casilla && !valor && el.type !== 'text') return;
     else p[campo] = valor;
-    guardar(estado);
+    ui.muestra = null;
+    salva();
     if (casilla) pinta();
   }
 }
 document.addEventListener('input', alCambiar);
+
+document.addEventListener('change', async (ev) => {
+  if (ev.target.id !== 'fichero') return;
+  const fichero = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!fichero) return;
+  try {
+    proponeCopia(deCopia(await fichero.text()));
+  } catch {
+    avisa('Ese archivo no es una copia de Stormy');
+  }
+});
 
 document.addEventListener('submit', (ev) => {
   if (ev.target.id !== 'form-nimbo') return;
@@ -842,46 +1613,80 @@ document.addEventListener('submit', (ev) => {
   preguntaANimbo(texto);
 });
 
+// «Ver un mes completo»: la vista de ejemplo solo se ve mientras el botón está pulsado. No se repinta nada:
+// las dos rejillas están ya en la página y se alterna una clase, así el dedo no pierde el botón.
+function mantener(activo) {
+  const cal = $('.cal');
+  if (!cal) return;
+  cal.classList.toggle('viendo-ejemplo', activo);
+  cal.querySelector('.cal-ejemplo').setAttribute('aria-hidden', String(!activo));
+  $('[data-mantener]')?.setAttribute('aria-pressed', String(activo));
+}
+document.addEventListener('pointerdown', (ev) => {
+  if (ev.target.closest?.('[data-mantener]')) mantener(true);
+});
+for (const tipo of ['pointerup', 'pointercancel', 'blur']) addEventListener(tipo, () => mantener(false));
+document.addEventListener('contextmenu', (ev) => {
+  if (ev.target.closest?.('[data-mantener]')) ev.preventDefault();
+});
+
 document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && ui.recorrido != null) return terminaRecorrido();
   if (ev.key === 'Escape' && ui.hoja) acciones.cerrarHoja();
+  if ((ev.key === ' ' || ev.key === 'Enter') && ev.target.matches?.('[data-mantener]')) mantener(true);
+  // Las fases de la rueda son elementos SVG con role="button": se activan también con Intro o espacio.
+  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.matches?.('[role="button"][data-accion]')) {
+    ev.preventDefault();
+    acciones[ev.target.dataset.accion]?.(ev.target.dataset);
+  }
   if (ev.key === 'Enter' && ev.target.matches?.('input[type=text]') && ev.target.id !== 'pregunta') ev.target.blur();
+});
+document.addEventListener('keyup', (ev) => {
+  if (ev.target.matches?.('[data-mantener]')) mantener(false);
 });
 
 addEventListener('beforeinstallprompt', (ev) => {
   ev.preventDefault();
   ui.instalar = ev;
-  if (ui.pestana === 'ajustes' && estado.perfil.alta) pinta();
+  if (!ui.hoja && (ui.pestana === 'ajustes' || !E().perfil.alta)) pinta();
+});
+
+// Si el sistema cambia entre claro y oscuro con la app abierta, se repinta el campo de color.
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => pinta());
+
+addEventListener('resize', () => {
+  if (ui.recorrido != null) pintaGuia();
 });
 
 // Respuestas dadas desde un aviso del sistema: se apuntan al abrir o al volver a la app.
 async function vuelcaPendientes() {
   const pendientes = await recogePendientes();
-  if (!pendientes.length || !estado.perfil.alta) return;
+  if (!pendientes.length || !real.perfil.alta) return;
   for (const { dia, animo } of pendientes) {
-    const e = estado.entradas[dia];
+    const e = real.entradas[dia];
     if (e) e.animo = animo;
-    else estado.entradas[dia] = { animo, sueno: null, estres: null, etiquetas: [], nota: '', regla: false };
+    else real.entradas[dia] = { ...entradaVacia(), animo };
   }
-  guardar(estado);
+  guardar(real);
   if (!ui.hoja) pinta();
   avisa('Parte apuntado desde el aviso');
 }
 navigator.serviceWorker?.addEventListener('message', (ev) => {
   if (ev.data?.tipo === 'respuesta-aviso') vuelcaPendientes();
-  if (ev.data?.tipo === 'abrir-registro' && estado.perfil.alta && !ui.hoja) acciones.abrirRegistro({});
-});
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) vuelcaPendientes();
+  if (ev.data?.tipo === 'abrir-registro' && real.perfil.alta && !ui.hoja) acciones.abrirRegistro({});
 });
 
-// Al volver a la app otro día, refresca el parte.
+// Al volver a la app: se recogen respuestas de avisos, se refresca el día y se ofrece rellenar lo pendiente.
 let diaPintado = hoyIso();
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && diaPintado !== hoyIso()) {
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) return;
+  await vuelcaPendientes();
+  if (diaPintado !== hoyIso()) {
     diaPintado = hoyIso();
     ui.mes = diaPintado.slice(0, 7);
     if (!ui.hoja) pinta();
   }
+  ofreceRecuperacion();
 });
 
 // Con el teclado abierto en el móvil, la ventana del chat sube para que el campo de texto siga a la vista.
@@ -899,4 +1704,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 pinta();
-vuelcaPendientes();
+// Quien ya había terminado la bienvenida pero no vio el recorrido (o lo dejó a medias) lo ve al entrar.
+if (!demo && real.perfil.alta && !real.perfil.recorrido && !new URLSearchParams(location.search).has('hoja')) empiezaRecorrido();
+vuelcaPendientes().then(() => {
+  // Si se abre directamente el registro (enlace del aviso), no se interrumpe con la oferta de días pendientes.
+  if (!new URLSearchParams(location.search).has('hoja')) setTimeout(ofreceRecuperacion, 400);
+});

@@ -1,7 +1,7 @@
 {
   "name": "Stormy",
   "short_name": "Stormy",
-  "description": "Ve venir las tormentas en casa y disfruta más del sol. Un toque al día; en un mes, pronóstico.",
+  "description": "Cada día apuntas qué tiempo ha hecho en casa. En unas semanas, Stormy te avisa de cuándo viene tormenta y de cuándo sale el sol.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",

@@ -3,28 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Stormy — Ve venir las tormentas en casa</title>
-  <meta name="description" content="Apunta cada día qué tiempo hace en casa. En 30 días, pronóstico y consejos con humor para tu pareja. Gratis y sin cuentas.">
+  <title>Stormy — ¿Es predecible el clima de casa?</title>
+  <meta name="description" content="Cada día apuntas qué tiempo ha hecho en casa. En unas semanas, Stormy te avisa de cuándo viene tormenta y de cuándo sale el sol. Gratis y sin cuentas.">
   <meta name="theme-color" content="#8EE0C8">
   <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Stormy">
-  <meta property="og:title" content="Stormy">
-  <meta property="og:description" content="Ve venir las tormentas. Disfruta más del sol.. Un toque al día; en un mes, pronóstico.">
+  <meta property="og:title" content="Stormy: ¿es predecible el clima de casa?">
+  <meta property="og:site_name" content="Stormy">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:description" content="En casa dicen que soy muy predecible. Así que he creado Stormy, para comprobar si el clima de casa también lo es.">
+  <meta property="og:url" content="https://luiszaorzoso98-max.github.io/stormy/">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="iconos/icono-512.png">
+  <meta property="og:image" content="https://luiszaorzoso98-max.github.io/stormy/iconos/stormy-og.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Stormy, una nube con un rayo, y la frase «En casa dicen que soy muy predecible»">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="iconos/icono-192.png">
   <link rel="apple-touch-icon" href="iconos/icono-180.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div id="franja" role="status" hidden><span>Estás viendo datos de ejemplo</span><button type="button" data-accion="salirDemo">Salir</button></div>
+  <div id="fondo" aria-hidden="true"></div>
   <div id="vista"></div>
   <nav id="barra" aria-label="Secciones" hidden></nav>
   <button type="button" id="nimbo" data-accion="abrirNimbo" aria-label="Hablar con Stormy, tu predictor de tormentas" hidden></button>
   <div id="hoja"></div>
+  <div id="guia" hidden></div>
+  <input type="file" id="fichero" accept=".json,application/json" hidden aria-hidden="true" tabindex="-1">
   <div id="aviso" role="status" aria-live="polite"></div>
   <noscript><p style="padding:2rem;font-family:system-ui">Stormy necesita JavaScript para funcionar.</p></noscript>
   <script type="module" src="js/app.js"></script>

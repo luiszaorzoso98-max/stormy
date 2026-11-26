@@ -48,7 +48,7 @@ export function capacidad() {
 }
 
 export const contenidoAviso = () => ({
-  titulo: '¿Qué tiempo hace hoy en casa?',
+  titulo: '¿Qué tiempo ha hecho hoy en casa?',
   opciones: {
     body: 'Elige el parte de hoy.',
     tag: 'parte-diario',
@@ -73,4 +73,20 @@ export async function muestraAviso() {
   const { titulo, opciones } = contenidoAviso();
   await registro.showNotification(titulo, opciones);
   return { ok: true, botones: c.botones };
+}
+
+/**
+ * Pide permiso para los avisos del sistema, si el dispositivo los admite. No programa ningún aviso diario:
+ * eso necesita un servidor de envío que todavía no existe, y hasta entonces el recordatorio va por el calendario.
+ * @returns {Promise<'granted'|'denied'|'default'|'no-disponible'>}
+ */
+export async function pidePermiso() {
+  const c = capacidad();
+  if (!c.hayAvisos) return 'no-disponible';
+  const permiso = c.permiso === 'default' ? await Notification.requestPermission() : c.permiso;
+  // AVISO DIARIO (pendiente): aquí se registrará la suscripción cuando haya servidor de avisos:
+  //   const registro = await navigator.serviceWorker.ready;
+  //   const suscripcion = await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+  //   …y se enviará al servidor solo la dirección de aviso y la hora elegida, nunca los partes ni el ciclo.
+  return permiso;
 }

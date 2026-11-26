@@ -1,14 +1,31 @@
-// Nimbo, el meteorólogo de guardia. Responde preguntas a partir de los datos del dispositivo.
+// Stormy, el ayudante (en el código, «Nimbo»). Responde preguntas a partir de los datos del dispositivo.
 // No usa ningún servicio externo: reconoce la intención de la pregunta y redacta la respuesta con el modelo local.
-// Personalidad: hombre del tiempo de la tele, guasón, siempre de parte de la pareja y honesto con lo que no sabe.
-import { FASES, SEMANA, aIso, aNum, diaSemana, diasDePronostico, nivelActual, nivelSiguiente, racha, tiempoDe } from './motor.js';
-import { TIEMPOS, consejoDe, fraseHoroscopo, signo } from './contenido.js';
+// Personalidad: hombre del tiempo de la tele, guasón, de parte de la casa entera y honesto con lo que no sabe.
+// Del ciclo menstrual habla en tono formal y sin bromas.
+import { FASES, SEMANA, aIso, aNum, diaSemana, diasDePronostico, nivelActual, nivelSiguiente, premioDe, racha, tiempoDe } from './motor.js';
+import { TIEMPOS, consejoDe, horoscopoDe } from './contenido.js';
+import { estacion, faseLunar, textoLuz } from './cielo.js';
+import { quienDe } from './datos.js';
 
-export const NIMBO = {
-  nombre: 'Stormy',
-  cargo: 'Predictor de tormentas',
-  sugerencias: ['¿Qué tal hoy?', '¿Y mañana?', '¿Cuándo propongo un plan?', '¿Qué le afecta?', '¿Aciertas mucho?', '¿Cómo va el mes?'],
+export const NIMBO = { nombre: 'Stormy', cargo: 'Predictor de tormentas' };
+
+/** Preguntas sugeridas; la del ciclo solo aparece si el ciclo está activado. */
+export const sugerenciasDe = (perfil) => [
+  '¿Qué tal hoy?', '¿Y mañana?', '¿Qué influye en el ambiente de casa?', '¿Qué dice el horóscopo de hoy?',
+  ...(perfil?.sigueCiclo ? ['¿Cómo funciona el ciclo menstrual?'] : []),
+  '¿Cuándo propongo un plan?', '¿Aciertas mucho?', '¿Cómo va el mes?',
+];
+
+// Lo que dice Stormy justo después de apuntar el parte.
+const REACCIONES = {
+  5: ['¡Anticiclón en casa! Apuntado, y que dure.', 'Sol a raudales. Me lo guardo para los días nublados.'],
+  4: ['Buen tiempo con alguna nube: así da gusto hacer el parte.', 'Apuntado. Cielo amable el de hoy.'],
+  3: ['Día nublado, día normal. También cuenta, y mucho.', 'Apuntado. Los días corrientes son mi mejor materia prima.'],
+  2: ['Chubascos anotados. Mañana miro si escampa.', 'Día de paraguas. Gracias por apuntarlo igualmente.'],
+  1: ['Tormenta registrada. Pasan todas; esta también.', 'Apuntado sin dramas: las tormentas se ven mejor en el mapa.'],
 };
+/** @param {number} tiempo  @param {number} giro para alternar las frases sin azar */
+export const reaccion = (tiempo, giro = 0) => REACCIONES[tiempo][giro % REACCIONES[tiempo].length];
 
 const limpia = (t) =>
   t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -31,7 +48,8 @@ const fechaCorta = (iso) => {
 export function responder(pregunta, ctx, giro = 0) {
   const q = ` ${limpia(pregunta)} `;
   const { motor, entradas, perfil, hoy } = ctx;
-  const ella = perfil.nombre?.trim() || 'tu pareja';
+  const quien = quienDe(perfil);
+  const consejo = (t, iso) => consejoDe(t, iso, perfil.relacion ?? 'pareja');
   const dias = motor.dias;
   const elige = (xs) => xs[giro % xs.length];
   const hay = (...claves) => claves.some((c) => q.includes(c));
@@ -50,14 +68,29 @@ export function responder(pregunta, ctx, giro = 0) {
     return r('privacidad', 'Todo lo que sé vive en este dispositivo. No tengo servidor, ni cuenta, ni a quién contárselo. Y si me borras, me llevo el secreto a la tumba.');
   }
   if (hay(' horoscopo', ' signo', ' astros', ' zodiaco')) {
-    if (!perfil.nacimiento) return r('horoscopo', 'No tengo su fecha de nacimiento, así que hoy los astros descansan. Puedes añadirla en Ajustes, aunque te aviso: es puro teatro.');
-    const s = signo(perfil.nacimiento);
-    return r('horoscopo', `${s.emoji} ${s.nombre}. ${fraseHoroscopo(hoy)} Esto es broma, claro: los astros no entran en mis cálculos.`);
+    if (!perfil.nacimiento) return r('horoscopo', 'No tengo fecha de nacimiento, así que hoy los astros descansan. Se puede añadir en Ajustes, aunque te aviso: es un juego, no una predicción.');
+    const h = horoscopoDe(perfil.nacimiento, hoy, faseLunar(hoy));
+    return r('horoscopo', `${h.signo.emoji} ${h.frase} El único dato real es la luna de hoy: ${h.dato}. No hay pruebas de que el signo prediga nada, y no entra en mis cálculos.`);
   }
 
-  // --- Ciclo ---
-  if (hay(' regla', ' ciclo', ' fase', ' ovula', ' periodo')) {
-    if (!motor.sigueCiclo) return r('ciclo', 'El ciclo no está activado. Si ella quiere compartirlo, se enciende en Ajustes; si no, me apaño con el resto de datos.');
+  // --- El cielo de verdad: luna, horas de luz y estación ---
+  if (hay(' luna', ' horas de luz', ' estacion', ' invierno', ' verano', ' otono', ' primavera', ' cielo de hoy')) {
+    const luna = faseLunar(hoy);
+    const vistos = motor.automaticos().filter((f) => f.visible && f.tipo !== 'semana').slice(0, 2);
+    const efecto = vistos.length
+      ? `En vuestros partes sí asoma alguna coincidencia: ${vistos.map((f) => `${f.titulo.toLowerCase()} (${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))})`).join(', ')}. Coincidencia, no causa.`
+      : 'En vuestros partes no veo que la luna, la luz o la estación muevan el clima de casa, así que no los cuento.';
+    return r('cielo', `Hoy: ${luna.nombre.toLowerCase()} (aprox.), unas ${textoLuz(hoy)} de luz y ${estacion(hoy).nombre.toLowerCase()}. ${efecto}`);
+  }
+
+  // --- Ciclo: explicación general, en tono formal ---
+  if (hay(' ciclo', ' regla', ' menstrua') && hay(' como funciona', ' que es ', ' explica', ' en que consiste', ' fases del')) {
+    return r('ciclo-info', `El ciclo menstrual se cuenta desde el primer día de una regla hasta el primer día de la siguiente. La media ronda los 28 días y son habituales los ciclos de entre 21 y 35. Tiene cuatro momentos: menstruación, fase folicular, ovulación y fase lútea. Cada persona lo vive de forma distinta y no hay una regla general sobre el ánimo. ${perfil.sigueCiclo ? 'En Descubrimientos, «Conoce el ciclo» lo explica fase a fase, con sus fuentes.' : 'Si lo veis necesario, se puede añadir en Ajustes; entonces Descubrimientos lo explica fase a fase, con sus fuentes.'} Es información general, no consejo médico.`);
+  }
+
+  // --- Ciclo: en qué día está ---
+  if (hay(' regla', ' ciclo', ' fase', ' ovula', ' periodo', ' menstrua')) {
+    if (!motor.sigueCiclo) return r('ciclo', 'El ciclo menstrual no está activado. Se puede añadir en Ajustes, si lo veis necesario; si no, me apaño con el resto de datos.');
     const d = motor.diaCiclo(hoy);
     const f = FASES.find((x) => x.id === motor.fase(hoy));
     const faltan = motor.duracion - d + 1;
@@ -79,8 +112,8 @@ export function responder(pregunta, ctx, giro = 0) {
     const s = nivelSiguiente(dias);
     const rch = racha(Object.keys(entradas), hoy);
     return r('nivel', s
-      ? `Eres «${n.titulo}» con ${plural(dias, 'día', 'días')} y una racha de ${rch}. Te faltan ${s.dias - dias} para ser «${s.titulo}» y desbloquear ${s.premio.toLowerCase()}.`
-      : `Eres «${n.titulo}»: mes completo, ${plural(dias, 'parte', 'partes')} y racha de ${rch}. Ya no te quedan niveles, solo más puntería para mí.`);
+      ? `Eres «${n.titulo}» con ${plural(dias, 'día', 'días')}, una racha de ${rch}${ctx.rayos != null ? ` y ${ctx.rayos} rayos` : ''}. Te faltan ${s.dias - dias} para ser «${s.titulo}» y desbloquear: ${premioDe(s, perfil.sigueCiclo).toLowerCase()}.`
+      : `Eres «${n.titulo}»: ${plural(dias, 'parte', 'partes')} y racha de ${rch}. Ya no quedan mundos por abrir, solo más puntería para mí.`);
   }
 
   // --- Por qué ---
@@ -88,16 +121,21 @@ export function responder(pregunta, ctx, giro = 0) {
     const p = motor.pronostico(hoy, entradas[hoy] ? hoy : null);
     return r('motivos', p.motivos.length
       ? `Para hoy salía ${desc(p.tiempo)} por esto: ${p.motivos.join('; ').toLowerCase()}. Fiabilidad del ${fiab(p)}.`
-      : `Para hoy salía ${desc(p.tiempo)} sin nada especial que lo explique: es, sencillamente, su media. Fiabilidad del ${fiab(p)}.`);
+      : `Para hoy salía ${desc(p.tiempo)} sin nada especial que lo explique: es, sencillamente, la media de la casa. Fiabilidad del ${fiab(p)}.`);
   }
 
   // --- Factores ---
-  if (hay(' sueno', ' dorm', ' estres', ' afecta', ' influye', ' factor', ' depende', ' le sienta')) {
-    if (dias < 14) return r('factores', `Para hablar de causas necesito 14 días y llevo ${dias}. Mientras tanto, marca sueño, estrés y etiquetas al registrar: es mi materia prima.`);
+  if (hay(' sueno', ' dorm', ' noche', ' estres', ' afecta', ' influye', ' factor', ' depende', ' le sienta', ' ambiente')) {
+    if (dias < 14) return r('factores', `Para hablar de qué influye necesito 14 días y llevo ${dias}. Mientras tanto, marca la noche, el estrés y lo que pasa cada día al registrar: es mi materia prima.`);
+    const firma = (f) => `${f.titulo.toLowerCase()} (${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))})`;
     const fs = motor.factores().slice(0, 3);
-    if (!fs.length) return r('factores', 'Me faltan datos extra. Apunta sueño, estrés y lo que pasa cada día, y te diré qué mueve el clima de casa.');
-    const frase = fs.map((f) => `${f.titulo.toLowerCase()} (${f.delta >= 0 ? '+' : '−'}${num(Math.abs(f.delta))})`).join(', ');
-    return r('factores', `Lo que más coincide con los cambios: ${frase}. Son niveles sobre 5 y son coincidencias, no sentencias: yo observo, no acuso.`);
+    const auto = motor.automaticos().filter((f) => f.visible).slice(0, 2);
+    // Los factores automáticos se comentan siempre, con la salvedad honesta cuando no se ve efecto.
+    const cielo = auto.length
+      ? `De lo que no hace falta apuntar: ${auto.map(firma).join(', ')}.`
+      : 'También miro la luna, las horas de luz, la estación y el día de la semana: por ahora no veo que muevan vuestro clima.';
+    if (!fs.length) return r('factores', `Me faltan datos extra. Apunta la noche, el estrés y lo que pasa cada día, y te diré qué mueve el clima de casa. ${cielo}`);
+    return r('factores', `Lo que más coincide con los cambios: ${fs.map(firma).join(', ')}. ${cielo} Son niveles sobre 5 y son coincidencias, no sentencias: yo observo, no acuso.`);
   }
 
   // --- Patrón semanal ---
@@ -141,8 +179,8 @@ export function responder(pregunta, ctx, giro = 0) {
   // --- Lo que no sabe ---
   if (hay(' que le pasa', ' enfadad', ' me quiere', ' me odia', ' que piensa', ' que he hecho', ' cabread', ' molest')) {
     return r('mente', elige([
-      `Yo miro el cielo, no dentro de la cabeza de ${ella}. Para eso hay un método infalible que ningún modelo supera: preguntárselo y escuchar.`,
-      `Eso no sale en mis mapas. Mi consejo profesional: pregúntale a ${ella} qué tal está, sin móvil en la mano.`,
+      `Yo miro el cielo de casa, no dentro de la cabeza de nadie. Para eso hay un método que ningún modelo supera: hablarlo con ${quien} y escuchar.`,
+      `Eso no sale en mis mapas. Mi consejo profesional: sentaos a hablar, ${quien} y tú, sin móvil en la mano.`,
     ]));
   }
 
@@ -158,7 +196,7 @@ export function responder(pregunta, ctx, giro = 0) {
       return r('dia', `Para ${etiqueta} todavía no tengo licencia: necesito ${dias < 14 ? 14 : 30} días de partes y llevamos ${dias}. Sigue apuntando y te lo canto.`);
     }
     const p = motor.pronostico(aIso(aNum(hoy) + salto));
-    return r('dia', `${etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1)} pinta ${desc(p.tiempo)}, con una fiabilidad del ${fiab(p)}.${p.motivos.length ? ` ${p.motivos[0]}.` : ''} ${consejoDe(p.tiempo, p.dia)}`);
+    return r('dia', `${etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1)} pinta ${desc(p.tiempo)}, con una fiabilidad del ${fiab(p)}.${p.motivos.length ? ` ${p.motivos[0]}.` : ''} ${consejo(p.tiempo, p.dia)}`);
   };
   for (let ds = 0; ds < 7; ds++) {
     if (NOMBRES_DIA[ds].some((n) => q.includes(` ${n} `))) {
@@ -192,7 +230,7 @@ export function responder(pregunta, ctx, giro = 0) {
   // --- Consejo ---
   if (hay(' consejo', ' que hago', ' que puedo hacer', ' ayuda', ' recomiend', ' que me dices')) {
     const t = entradas[hoy]?.animo ?? motor.pronostico(hoy).tiempo;
-    return r('consejo', consejoDe(t, hoy));
+    return r('consejo', consejo(t, hoy));
   }
 
   // --- Hoy ---
@@ -201,9 +239,9 @@ export function responder(pregunta, ctx, giro = 0) {
     const p = motor.pronostico(hoy, e ? hoy : null);
     if (e) {
       const acierto = p.tiempo === e.animo ? 'Lo clavé.' : Math.abs(p.tiempo - e.animo) === 1 ? 'Yo preveía algo parecido: lo rocé.' : `Yo preveía ${desc(p.tiempo)}: hoy me ha pillado sin paraguas.`;
-      return r('hoy', `Hoy has apuntado ${desc(e.animo)}. ${acierto} ${consejoDe(e.animo, hoy)}`);
+      return r('hoy', `Hoy has apuntado ${desc(e.animo)}. ${acierto} ${consejo(e.animo, hoy)}`);
     }
-    return r('hoy', `Para hoy con ${ella} preveo ${desc(p.tiempo)}, con una fiabilidad del ${fiab(p)}${dias < 7 ? ' (es poco: aún estoy conociendo el clima de la casa)' : ''}. ${consejoDe(p.tiempo, hoy)} Y no te olvides de registrar el parte.`);
+    return r('hoy', `Para hoy en casa preveo ${desc(p.tiempo)}, con una fiabilidad del ${fiab(p)}${dias < 7 ? ' (es poco: aún estoy conociendo el clima de la casa)' : ''}. ${consejo(p.tiempo, hoy)} Y no te olvides de registrar el parte.`);
   }
 
   // --- Cortesía ---
@@ -215,17 +253,18 @@ export function responder(pregunta, ctx, giro = 0) {
 
   // --- No lo ha entendido ---
   return r('desconocido', elige([
-    'Esa nube no la tengo catalogada. Prueba con: «¿qué tal hoy?», «¿y mañana?», «¿cuándo propongo un plan?» o «¿qué le afecta?».',
-    'Ahí me pillas fuera de cobertura. Yo entiendo de hoy, mañana, la semana, el ciclo, los niveles y de si acierto o no.',
+    'Esa nube no la tengo catalogada. Prueba con: «¿qué tal hoy?», «¿y mañana?», «¿cuándo propongo un plan?» o «¿qué influye en el ambiente de casa?».',
+    'Ahí me pillas fuera de cobertura. Yo entiendo de hoy, mañana, la semana, lo que influye en casa, los niveles y de si acierto o no.',
   ]));
 }
 
-/** Saludo inicial, según lo que ya sabe. */
+/** Saludo inicial, según lo que ya sabe y cómo llaman a quien pregunta. */
 export function saludo(ctx) {
   const dias = ctx.motor.dias;
-  const ella = ctx.perfil.nombre?.trim() || 'tu pareja';
-  if (dias === 0) return `¡Buenas! Soy Stormy, vuestro predictor de tormentas. Aún no tengo ni un parte de ${ella}, así que hoy hablo de oídas. Apunta el primero y empiezo a trabajar.`;
-  if (dias < 7) return `¡Buenas! Soy Stormy. Llevo ${plural(dias, 'día', 'días')} observando el clima de la casa: todavía hablo con prudencia, pero pregunta lo que quieras.`;
-  if (dias < 30) return `¡Buenas! Aquí Stormy, con ${dias} días de partes de ${ella}. Ya voy viendo patrones. ¿Qué quieres saber?`;
-  return `¡Buenas! Aquí Stormy, con el mes completo estudiado. Pregunta sin miedo: hoy, mañana, la semana o cuándo proponer ese plan.`;
+  const yo = ctx.perfil.miApodo?.trim();
+  const hola = yo ? `¡Buenas, ${yo}!` : '¡Buenas!';
+  if (dias === 0) return `${hola} Soy Stormy, el predictor de tormentas de la casa. Aún no tengo ni un parte, así que hoy hablo de oídas. Apunta el primero y empiezo a trabajar.`;
+  if (dias < 7) return `${hola} Soy Stormy. Llevo ${plural(dias, 'día', 'días')} observando el clima de la casa: todavía hablo con prudencia, pero pregunta lo que quieras.`;
+  if (dias < 30) return `${hola} Aquí Stormy, con ${dias} días de partes de la casa. Ya voy viendo patrones. ¿Qué quieres saber?`;
+  return `${hola} Aquí Stormy, con el mes completo estudiado. Pregunta sin miedo: hoy, mañana, la semana o cuándo proponer ese plan.`;
 }
