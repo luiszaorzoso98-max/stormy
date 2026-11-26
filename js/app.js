@@ -213,7 +213,7 @@ function hojaRegistro() {
       ${perfil.sigueCiclo ? `<div class="caja">${interruptor('borrador.regla', b.regla, 'Hoy le ha bajado la regla')}</div>` : ''}
       <textarea class="caja" rows="2" maxlength="280" placeholder="Nota (opcional)" data-modelo="borrador.nota" aria-label="Nota">${esc(b.nota)}</textarea>
     </div>
-    <div class="hoja-pie"><button class="principal" style="${b.animo ? `--boton:${TIEMPOS[b.animo].tinte}` : ''}" data-accion="guardarParte" ${b.animo ? '' : 'disabled'}>${b.existia ? 'Actualizar parte' : 'Guardar parte'}</button></div>`;
+    <div class="hoja-pie"><button class="principal" data-accion="guardarParte" ${b.animo ? '' : 'disabled'}>${b.existia ? 'Actualizar parte' : 'Guardar parte'}</button></div>`;
 }
 
 // ---------- Niveles ----------
@@ -511,18 +511,22 @@ function pinta({ arriba = false } = {}) {
   if (!VISTAS[ui.pestana]) ui.pestana = 'hoy';
   vista.innerHTML = alta ? VISTAS[ui.pestana]() : bienvenida();
 
-  let cielo = null;
-  if (!alta) cielo = ['#2A66C8', '#4F92DE', '#7FB4EA'];
+  // Cada estado es un campo de color plano; el texto va en tinta, salvo sobre la tormenta.
+  let campo = null;
+  if (!alta) campo = TIEMPOS[4];
   else if (ui.pestana === 'hoy') {
     const hoy = hoyIso();
-    cielo = TIEMPOS[estado.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo].cielo;
+    campo = TIEMPOS[estado.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo];
   }
-  document.body.classList.toggle('con-cielo', !!cielo);
-  if (cielo) {
-    document.body.style.setProperty('--cielo', `linear-gradient(${cielo[0]}, ${cielo[1]} 55%, ${cielo[2]})`);
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', cielo[0]);
+  document.body.classList.toggle('con-cielo', !!campo);
+  document.body.classList.toggle('cielo-oscuro', campo?.sobre === '#FFFFFF');
+  if (campo) {
+    const c = campo.cielo;
+    document.body.style.setProperty('--cielo', `linear-gradient(${c[0]}, ${c[1]} 55%, ${c[2]})`);
+    document.body.style.setProperty('--sobre', campo.sobre);
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', c[0]);
   } else {
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', matchMedia('(prefers-color-scheme: dark)').matches ? '#000000' : '#F2F2F7');
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', matchMedia('(prefers-color-scheme: dark)').matches ? '#12152B' : '#F6F4FB');
   }
 
   $('#barra').innerHTML = alta

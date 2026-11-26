@@ -4,8 +4,8 @@ export const APP = { nombre: 'Sí, Cielo', lema: 'El parte del tiempo de tu casa
 /** Los cinco estados del tiempo en casa. 1 = tormenta, 5 = soleado. */
 export const TIEMPOS = {
   5: {
-    id: 5, titulo: 'Soleado', desc: 'Día estupendo', emoji: '☀️', tinte: '#FFA826',
-    cielo: ['#1877E6', '#49B6F5', '#FFD98A'],
+    id: 5, titulo: 'Soleado', desc: 'Día estupendo', emoji: '☀️', tinte: '#FFB627', sobre: '#1E2749',
+    cielo: ['#FFC94D', '#FFDB80', '#FFEFC2'],
     consejos: [
       'Cielo despejado. Hoy hasta tus chistes malos tienen público.',
       'Día perfecto para proponer ese plan que llevas semanas aplazando.',
@@ -13,8 +13,8 @@ export const TIEMPOS = {
     ],
   },
   4: {
-    id: 4, titulo: 'Sol y nubes', desc: 'Buen día', emoji: '⛅️', tinte: '#3D9BE9',
-    cielo: ['#2F6FD0', '#6FAEE8', '#C4DDF5'],
+    id: 4, titulo: 'Sol y nubes', desc: 'Buen día', emoji: '⛅️', tinte: '#3CC9A3', sobre: '#1E2749',
+    cielo: ['#8EE0C8', '#B4ECD9', '#DDF7EC'],
     consejos: [
       'Buen tiempo con alguna nube. Un café a tiempo mantiene el anticiclón.',
       'Todo en orden. No lo estropees dejando la toalla mojada sobre la cama.',
@@ -22,8 +22,8 @@ export const TIEMPOS = {
     ],
   },
   3: {
-    id: 3, titulo: 'Nublado', desc: 'Día normal', emoji: '☁️', tinte: '#8794A8',
-    cielo: ['#56657A', '#8794A8', '#BFC8D4'],
+    id: 3, titulo: 'Nublado', desc: 'Día normal', emoji: '☁️', tinte: '#A99BE0', sobre: '#1E2749',
+    cielo: ['#C9BFF0', '#DAD3F5', '#EEEAFB'],
     consejos: [
       'Cielo cubierto. Pregunta qué tal el día y, esta vez, escucha la respuesta.',
       'Ni frío ni calor. Haz esa tarea de casa sin que nadie te la pida.',
@@ -31,8 +31,8 @@ export const TIEMPOS = {
     ],
   },
   2: {
-    id: 2, titulo: 'Lluvia', desc: 'Día bajo', emoji: '🌧️', tinte: '#4A7FB5',
-    cielo: ['#2C3E55', '#4B6A88', '#86A0B8'],
+    id: 2, titulo: 'Lluvia', desc: 'Día bajo', emoji: '🌧️', tinte: '#6C8AEA', sobre: '#1E2749',
+    cielo: ['#8FA8F0', '#B1C3F6', '#DCE5FC'],
     consejos: [
       'Posibles chubascos. Menos consejos y más escuchar.',
       'Lleva paraguas emocional y ten chocolate en la despensa.',
@@ -40,8 +40,8 @@ export const TIEMPOS = {
     ],
   },
   1: {
-    id: 1, titulo: 'Tormenta', desc: 'Día muy difícil', emoji: '⛈️', tinte: '#6C5CE7',
-    cielo: ['#171A36', '#3A2E66', '#6A5A96'],
+    id: 1, titulo: 'Tormenta', desc: 'Día muy difícil', emoji: '⛈️', tinte: '#4A3AA0', sobre: '#FFFFFF',
+    cielo: ['#2E2466', '#47388F', '#6A5BB5'],
     consejos: [
       'Aviso naranja. No es el día para debatir quién friega más.',
       'Tormenta a la vista: recoge la cocina y ofrece un abrazo.',
@@ -108,11 +108,11 @@ const sol = (cx, cy, r) => {
     const y2 = cy + Math.sin(a) * (r + 9);
     rayos += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
   }
-  return `<g stroke="#FFC92E" stroke-width="3.4" stroke-linecap="round">${rayos}</g><circle cx="${cx}" cy="${cy}" r="${r}" fill="#FFC92E"/>`;
+  return `<g stroke="#FF6B5E" stroke-width="3.4" stroke-linecap="round">${rayos}</g><circle cx="${cx}" cy="${cy}" r="${r}" fill="#FF6B5E"/>`;
 };
 
 const gotas = (xs) =>
-  `<g stroke="#3DBBF2" stroke-width="3.6" stroke-linecap="round">${xs
+  `<g stroke="#4C6FFF" stroke-width="3.6" stroke-linecap="round">${xs
     .map((x) => `<line x1="${x}" y1="47" x2="${x - 3}" y2="56"/>`)
     .join('')}</g>`;
 
@@ -121,7 +121,7 @@ const DIBUJOS = {
   4: sol(42, 21, 8) + nube(1, 12, 0.92),
   3: nube(0, 5),
   2: nube(0, -5) + gotas([23, 33, 43]),
-  1: nube(0, -6) + gotas([21, 45]) + '<path d="M35 42l-7 10h6l-3 9 9-12h-6l3-7z" fill="#FFC92E"/>',
+  1: nube(0, -6) + gotas([21, 45]) + '<path d="M35 42l-7 10h6l-3 9 9-12h-6l3-7z" fill="#FFC94D"/>',
 };
 
 export const iconoTiempo = (tiempo, lado = 28) =>
@@ -135,7 +135,7 @@ export const ficha = (tiempo, lado = 44) => {
 
 /** Retrato de Nimbo: una nube con cara sobre su trozo de cielo. */
 export const avatarNimbo = (lado = 44) =>
-  `<span class="avatar-nimbo" style="width:${lado}px;height:${lado}px"><svg viewBox="0 0 64 64" width="${Math.round(lado * 0.8)}" height="${Math.round(lado * 0.8)}" aria-hidden="true">${nube(0, 4)}<circle cx="25" cy="33" r="2.6" fill="#1C2340"/><circle cx="38" cy="33" r="2.6" fill="#1C2340"/><path d="M26.5 39.500c2.800 2.800 7.200 2.800 10 0" fill="none" stroke="#1C2340" stroke-width="2.200" stroke-linecap="round"/><circle cx="20.500" cy="38" r="2.400" fill="#FF8A3D" opacity=".55"/><circle cx="42.500" cy="38" r="2.400" fill="#FF8A3D" opacity=".55"/></svg></span>`;
+  `<span class="avatar-nimbo" style="width:${lado}px;height:${lado}px"><svg viewBox="0 0 64 64" width="${Math.round(lado * 0.8)}" height="${Math.round(lado * 0.8)}" aria-hidden="true">${nube(0, 4)}<circle cx="25" cy="33" r="2.6" fill="#1C2340"/><circle cx="38" cy="33" r="2.6" fill="#1C2340"/><path d="M26.5 39.500c2.800 2.800 7.200 2.800 10 0" fill="none" stroke="#1C2340" stroke-width="2.200" stroke-linecap="round"/><circle cx="20.500" cy="38" r="2.400" fill="#FF6B5E" opacity=".6"/><circle cx="42.500" cy="38" r="2.400" fill="#FF6B5E" opacity=".6"/></svg></span>`;
 
 const trazo = (d, extra = '') =>
   `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
