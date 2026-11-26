@@ -128,3 +128,29 @@ export const ORDEN_GUIAS = [
   ['Ordenador', ['escritorio-chrome', 'escritorio-edge', 'safari-mac']],
   ['Otras', ['inapp']],
 ];
+
+// ---------- Parámetros de la dirección ----------
+
+/** ¿Se está probando en el propio ordenador? Solo ahí se atienden los parámetros de prueba. */
+export const esLocal = (host = '') => host === 'localhost' || host === '127.0.0.1';
+
+// Lo que cualquier enlace puede pedir en producción: abrir el registro o el chat, una pestaña y el modo demostración.
+const HOJAS_PUBLICAS = ['registro', 'nimbo'];
+const PUBLICOS = ['hoja', 'demo', 'pestana'];
+
+/**
+ * Filtra los parámetros de la dirección. En local pasan todos (pruebas); fuera, solo ?hoja=registro|nimbo, ?demo y ?pestana.
+ * @returns {URLSearchParams}
+ */
+export function parametrosPermitidos(busqueda = '', local = false) {
+  const q = new URLSearchParams(busqueda);
+  if (local) return q;
+  const salida = new URLSearchParams();
+  for (const clave of PUBLICOS) {
+    if (!q.has(clave)) continue;
+    const valor = q.get(clave);
+    if (clave === 'hoja' && !HOJAS_PUBLICAS.includes(valor)) continue;
+    salida.set(clave, valor);
+  }
+  return salida;
+}

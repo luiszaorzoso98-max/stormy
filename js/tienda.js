@@ -159,13 +159,16 @@ export const tiendaVacia = () => ({
 });
 
 const ES_DIA = /^\d{4}-\d{2}-\d{2}$/;
-const entero = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : 0);
+// Cantidades de rayos y contadores: enteros entre 0 y un millón (un código pegado no puede inflarlos sin límite).
+export const MAX_ENTERO = 1e6;
+const entero = (v) => (Number.isFinite(Number(v)) ? Math.min(MAX_ENTERO, Math.max(0, Math.floor(Number(v)))) : 0);
 
 /** Convierte cualquier tienda guardada (o ninguna, en estados antiguos) al formato actual. */
 export function normalizaTienda(t) {
   const base = tiendaVacia();
   if (!t || typeof t !== 'object') return base;
-  const comprados = [...new Set((Array.isArray(t.comprados) ? t.comprados : []).filter((id) => objeto(id) && objeto(id).tipo !== 'comodin'))];
+  const comprados = [...new Set((Array.isArray(t.comprados) ? t.comprados : []).filter((id) => objeto(id) && objeto(id).tipo !== 'comodin'))]
+    .slice(0, CATALOGO.length);
   const equipado = { ...base.equipado };
   for (const tipo of TIPOS_EQUIPABLES) {
     const id = t.equipado?.[tipo];
@@ -177,7 +180,7 @@ export function normalizaTienda(t) {
     equipado,
     gastados: entero(t.gastados),
     extra: entero(t.extra),
-    historial: (Array.isArray(t.historial) ? t.historial : []).filter((h) => h && cofre(h.cofre) && objeto(h.premio)).slice(-100)
+    historial: (Array.isArray(t.historial) ? t.historial : []).filter((h) => h && cofre(h.cofre) && objeto(h.premio)).slice(-CATALOGO.length)
       .map((h) => ({ dia: String(h.dia ?? '').slice(0, 10), cofre: h.cofre, premio: h.premio, duplicado: !!h.duplicado })),
     bienvenida: !!t.bienvenida,
     avisoModo: !!t.avisoModo,

@@ -16,10 +16,10 @@ import {
 } from './tienda.js';
 import { capacidad, muestraAviso, pidePermiso, recogePendientes } from './avisos.js';
 import { faseLunar } from './cielo.js';
-import { GUIAS, ORDEN_GUIAS, detectaNavegador, enlaceChrome } from './navegador.js';
+import { GUIAS, ORDEN_GUIAS, detectaNavegador, enlaceChrome, esLocal, parametrosPermitidos } from './navegador.js';
 import {
   PARENTESCOS, RELACIONES, aCodigo, aCodigoCorto, aCopia, deCualquierCodigo, ofrecerTraspaso, tieneDatos, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
-  extrasDe, fusionaRespuestas, guardar, muestrasDe, rachaDe, rayosDeEstado, rayosDisponibles, reglasDe, totalExtras,
+  extrasDe, fusionaRespuestas, guardar, muestrasDe, rachaDe, rayosDeEstado, rayosDisponibles, reglasDe, totalExtras, diasDeEjemplo, rutaAlRegistro, ERRORES, LIMITES,
 } from './datos.js';
 
 // ---------- App nativa de iPhone ----------
@@ -86,18 +86,25 @@ const diasRegistrados = () => Object.keys(E().entradas).length;
 const muestra = () => (ui.muestra ??= ejemplo(60, { ...E().perfil, sigueCiclo: true }));
 const stormyEspecial = () => diasRegistrados() >= NIVELES[NIVELES.length - 1].dias;
 
-// ---------- Arranque con parámetros de prueba: ?demo=30&pestana=descubrimientos&hoja=registro&paso=2&reiniciar=1 ----------
+// ---------- Arranque con parámetros: ?hoja=registro|nimbo y ?demo=N en producción; el resto, solo en local ----------
+// En local (localhost / 127.0.0.1) también: ?reiniciar ?pity ?escena ?cara ?tema ?personalidad ?cielo ?paso ?modos ?categoria ?cofre ?pregunta ?ua
+// y las demás hojas. Fuera de local se ignoran, para que un enlace ajeno no pueda borrar datos ni cambiar la app.
+
+const EN_LOCAL = esLocal(location.hostname);
+/** Parámetros de la dirección que se atienden aquí: en producción, solo los permitidos. */
+const PARAMETROS = parametrosPermitidos(location.search, EN_LOCAL);
 
 {
-  const q = new URLSearchParams(location.search);
+  const q = PARAMETROS;
   if (q.has('reiniciar')) {
     real = borrarTodo();
     // Se quita de la dirección para que recargar la página no vuelva a borrar.
-    q.delete('reiniciar');
-    history.replaceState(null, '', location.pathname + (q.size ? `?${q}` : ''));
+    const visibles = new URLSearchParams(location.search);
+    visibles.delete('reiniciar');
+    history.replaceState(null, '', location.pathname + (visibles.size ? `?${visibles}` : ''));
   }
-  // ?demo=N abre el modo demostración con N días de ejemplo; no escribe nada en el almacenamiento.
-  if (q.has('demo')) demo = ejemplo(Number.isFinite(Number(q.get('demo'))) ? Number(q.get('demo')) : 30, real.perfil);
+  // ?demo=N abre el modo demostración con N días de ejemplo (de 1 a 365); no escribe nada en el almacenamiento.
+  if (q.has('demo')) demo = ejemplo(diasDeEjemplo(q.get('demo')), real.perfil);
   // ?demo=30&cielo=5: en el modo demostración, el parte de hoy de ejemplo con ese tiempo (solo en memoria).
   if (demo && /^[1-5]$/.test(q.get('cielo') ?? '')) demo.entradas[hoyIso()] = { ...entradaVacia(), animo: Number(q.get('cielo')) };
   // ?demo=30&escena=esqui&cara=gafas&tema=tema-oceano: en la demostración, objetos de la tienda puestos (solo en memoria).
@@ -113,13 +120,18 @@ const stormyEspecial = () => diasRegistrados() >= NIVELES[NIVELES.length - 1].di
       }
     }
   }
-  if (q.has('pestana')) ui.pestana = q.get('pestana');
+  // Object.hasOwn: «__proto__» o «constructor» en la dirección no rompen el arranque.
+  const PESTANAS_URL = { hoy: 1, calendario: 1, descubrimientos: 1, tienda: 1, ajustes: 1 };
+  if (q.has('pestana') && Object.hasOwn(PESTANAS_URL, q.get('pestana'))) ui.pestana = q.get('pestana');
   if (q.has('paso')) ui.paso = Number(q.get('paso')) || 0;
   if (q.has('hoja') && E().perfil.alta) {
-    const accion = {
+    const HOJAS_URL = {
       registro: 'abrirRegistro', niveles: 'abrirNiveles', nimbo: 'abrirNimbo', tienda: 'abrirTienda', coleccion: 'abrirColeccion', probabilidades: 'verProbabilidades',
-    }[q.get('hoja')] ?? 'abrirRegistro';
+    };
+    const accion = Object.hasOwn(HOJAS_URL, q.get('hoja')) ? HOJAS_URL[q.get('hoja')] : 'abrirRegistro';
     setTimeout(() => {
+      // El enlace de los avisos (web, calendario, acceso directo): directo a elegir el tiempo de hoy.
+      if (accion === 'abrirRegistro' && !demo) return irAlRegistro();
       acciones[accion]({ id: cofre(q.get('cofre'))?.id ?? 'tormenta', tipo: q.get('categoria') ?? '' });
       if (demo && q.get('modos')) acciones.menuModos();
       // ?demo=30&hoja=nimbo&pregunta=…: en la demostración, una pregunta ya hecha a Stormy.
@@ -161,8 +173,8 @@ function anillo(progreso, dentro, lado = 40, grosor = 4) {
 
 const enPantallaDeInicio = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 // Dispositivo y navegador (ver navegador.js). ?ua=… solo para probar las guías con otro navegador simulado.
-const UA = new URLSearchParams(location.search).get('ua') || navigator.userAgent;
-const nav = () => detectaNavegador(UA, { maxTouchPoints: new URLSearchParams(location.search).get('ua') ? 0 : navigator.maxTouchPoints, standalone: enPantallaDeInicio() });
+const UA = PARAMETROS.get('ua') || navigator.userAgent;
+const nav = () => detectaNavegador(UA, { maxTouchPoints: PARAMETROS.get('ua') ? 0 : navigator.maxTouchPoints, standalone: enPantallaDeInicio() });
 const esIOS = () => nav().plataforma === 'ios';
 const esAndroid = () => nav().plataforma === 'android';
 // Navegadores incrustados en otras apps: en iPhone no dejan añadir la web a la pantalla de inicio.
@@ -270,6 +282,7 @@ function bloqueGuardarProgreso() {
   preparaCodigo();
   return `<div class="tarjeta guardar-progreso"><p class="sobre">Antes de instalar: guarda tu progreso</p>
     <p class="nota sin-margen">Al abrir Stormy desde el icono, pégalo y seguirás donde lo dejaste.</p>
+    ${avisoCodigo()}
     <button type="button" class="principal ${ui.codigoCopiado ? 'suave' : ''}" data-accion="copiarMiCodigo">${ui.codigoCopiado ? `${ICONOS.visto}Código copiado` : `${ICONOS.copiar}Copiar mi código`}</button></div>`;
 }
 
@@ -1130,7 +1143,7 @@ function hojaCodigo() {
         ? 'Son tus datos convertidos en texto. Cópialo y pégalo en la app instalada o en otro móvil (Ajustes → «Pegar mi código»). No pasa por ningún servidor de Stormy.'
         : 'Pega aquí el código que copiaste en el navegador o en el otro móvil.'}</p>
       <textarea class="caja codigo" id="codigo" rows="6" ${ver ? 'readonly' : 'placeholder="STORMY1.…"'} aria-label="Código de traspaso" autocomplete="off" autocapitalize="off" spellcheck="false">${ver ? esc(ui.codigoListo ?? aCodigo(real)) : ''}</textarea>
-      ${ver ? '<p class="nota sin-margen">Incluye todo lo apuntado, también el ciclo si está activado. Trátalo como algo privado.</p>' : ''}
+      ${ver ? avisoCodigo() : ''}
     </div>
     <div class="hoja-pie"><button class="principal" data-accion="${ver ? 'copiarCodigo' : 'usarCodigo'}">${ver ? 'Copiar código' : 'Recuperar datos'}</button></div>`;
 }
@@ -1603,7 +1616,7 @@ function vistaAjustes() {
       <button type="button" class="enlace peligro" data-accion="pedirBorrarPartes">Borrar mis partes</button>
       <button type="button" class="enlace peligro" data-accion="pedirBorrarTodo">Borrar todo y empezar de cero</button>
     </div>
-    <p class="pie-seccion">Sin cuentas: la copia y el código los guardas tú, y Stormy no los envía a ningún sitio. Incluyen todo lo apuntado, también el ciclo si está activado.<br><br>${APP.nombre} ${APP.version} · Entretenimiento, no consejo médico.</p>
+    <p class="pie-seccion">Sin cuentas: la copia y el código los guardas tú, y Stormy no los envía a ningún sitio. ${AVISO_CODIGO}<br><br>${APP.nombre} ${APP.version} · Entretenimiento, no consejo médico.</p>
   </main>`;
 }
 
@@ -1690,7 +1703,7 @@ function pinta({ arriba = false } = {}) {
   const y = arriba ? 0 : scrollY;
   const st = E();
   const alta = st.perfil.alta;
-  if (!VISTAS[ui.pestana]) ui.pestana = 'hoy';
+  if (!Object.hasOwn(VISTAS, ui.pestana)) ui.pestana = 'hoy';
   const animaCalendario = alta && ui.pestana === 'calendario' && !ui.hoja && ui.recien;
   vista.innerHTML = alta ? VISTAS[ui.pestana]() : bienvenida();
   if (animaCalendario) ui.recien = null;
@@ -1814,9 +1827,34 @@ async function copia(texto, hecho) {
   try {
     await navigator.clipboard.writeText(texto);
     avisa(hecho);
+    return true;
   } catch {
     avisa('No se ha podido copiar: selecciona el texto y cópialo a mano');
+    return false;
   }
+}
+
+/** Mensaje para quien importa: el motivo concreto si es de tamaño; si no, el texto de siempre. */
+const motivoDe = (e, general) => ([ERRORES.grande, ERRORES.partes].includes(e?.message) ? e.message : general);
+
+/** Aviso que se enseña antes de copiar o compartir el código o la copia de seguridad. */
+const AVISO_CODIGO = 'Este código contiene tus partes y, si lo usas, el ciclo. Pégalo solo en tu propia app; no lo compartas en chats.';
+const avisoCodigo = () => `<p class="nota aviso-codigo">${AVISO_CODIGO}</p>`;
+
+/**
+ * Pasado un minuto, vacía el portapapeles si sigue teniendo ese mismo código. Es un intento: solo se hace si el
+ * navegador ya deja leer el portapapeles sin preguntar; si no (Safari, permiso no dado), no se hace nada.
+ */
+function limpiaPortapapelesLuego(codigo, ms = 60_000) {
+  setTimeout(async () => {
+    try {
+      const permiso = await navigator.permissions?.query({ name: 'clipboard-read' });
+      if (permiso?.state !== 'granted') return;
+      if ((await navigator.clipboard.readText()) === codigo) await navigator.clipboard.writeText('');
+    } catch {
+      /* sin permiso o sin portapapeles: se deja como está */
+    }
+  }, ms);
 }
 
 /** Evento diario con alarma para el calendario del dispositivo: recordatorio sin servidor. */
@@ -1845,6 +1883,26 @@ function proponeCopia(estado) {
     texto: `La copia trae ${n === 1 ? '1 parte' : `${n} partes`} y sustituye lo que hay ahora en este dispositivo (${actuales === 1 ? '1 parte' : `${actuales} partes`}). No se puede deshacer.`,
     boton: 'Recuperar', accion: 'aplicarCopia',
   });
+}
+
+/**
+ * Lleva directo a elegir el tiempo de hoy (aviso de la web o de la app nativa, alarma del calendario, acceso directo).
+ * Cierra lo que haya abierto (otra hoja, el recorrido) y abre el registro; si hoy ya tiene parte, se abre para editarlo.
+ * No hace nada antes de terminar la bienvenida ni en el modo demostración.
+ */
+function irAlRegistro() {
+  const ruta = rutaAlRegistro(real, { demo: !!demo, hoy: hoyIso() });
+  if (!ruta) return false;
+  if (ui.recorrido != null) {
+    ui.recorrido = null; // se retoma en otro momento: no se marca como visto
+    pintaGuia();
+  }
+  if (ui.hoja?.tipo === 'registro' && ui.borrador?.dia === ruta.dia) return true;
+  Object.assign(ui, { hoja: null, borrador: null, copiaPendiente: null, pestana: 'hoy' });
+  pintaHoja();
+  pinta();
+  acciones.abrirRegistro({ dia: ruta.dia });
+  return true;
 }
 
 // ---------- Acciones ----------
@@ -2308,6 +2366,7 @@ const acciones = {
   copiarMiCodigo() {
     const codigo = ui.codigoListo ?? aCodigo(real);
     navigator.clipboard?.writeText(codigo).then(() => {
+      limpiaPortapapelesLuego(codigo);
       ui.codigoCopiado = true;
       avisa('Código copiado');
       if (ui.hoja) pintaHoja(); else pinta();
@@ -2344,9 +2403,9 @@ const acciones = {
       pinta({ arriba: true });
       const dias = Object.keys(real.entradas).length;
       abreHoja({ tipo: 'confirmar', suave: true, titulo: '¡Todo recuperado!', texto: `${dias === 1 ? 'Un día apuntado' : `${dias} días apuntados`} y ${rayosDisponibles(real)} rayos. Sigues donde lo dejaste.`, boton: 'Ir a Hoy', accion: 'cerrarHoja', cancelar: false });
-    } catch {
+    } catch (e) {
       ui.traspasoManual = true;
-      ui.traspasoError = 'Ese código no es de Stormy o está incompleto. Vuelve a copiarlo en el navegador y pégalo otra vez.';
+      ui.traspasoError = motivoDe(e, 'Ese código no es de Stormy o está incompleto. Vuelve a copiarlo en el navegador y pégalo otra vez.');
       pinta({ arriba: true });
     }
   },
@@ -2360,14 +2419,15 @@ const acciones = {
     if (demo) return avisaDemo();
     abreHoja({ tipo: 'codigo', modo: 'pegar' });
   },
-  copiarCodigo() {
-    copia($('#codigo').value, 'Código copiado');
+  async copiarCodigo() {
+    const codigo = $('#codigo').value;
+    if (await copia(codigo, 'Código copiado')) limpiaPortapapelesLuego(codigo);
   },
   async usarCodigo() {
     try {
       proponeCopia(await deCualquierCodigo($('#codigo').value));
-    } catch {
-      avisa('Ese código no es de Stormy o está incompleto');
+    } catch (e) {
+      avisa(motivoDe(e, 'Ese código no es de Stormy o está incompleto'));
     }
   },
   aplicarCopia() {
@@ -2494,10 +2554,12 @@ document.addEventListener('change', async (ev) => {
   const fichero = ev.target.files?.[0];
   ev.target.value = '';
   if (!fichero) return;
+  // Un archivo enorme no se llega a leer.
+  if (fichero.size > LIMITES.texto) return avisa(ERRORES.grande);
   try {
     proponeCopia(deCopia(await fichero.text()));
-  } catch {
-    avisa('Ese archivo no es una copia de Stormy');
+  } catch (e) {
+    avisa(motivoDe(e, 'Ese archivo no es una copia de Stormy'));
   }
 });
 
@@ -2581,13 +2643,13 @@ globalThis.stormyRecibe = (respuestas) => {
 };
 globalThis.stormyAviso = (texto) => avisa(String(texto));
 globalThis.stormyAbrir = (que) => {
-  if (que === 'registro' && real.perfil.alta && !demo && ui.hoja?.tipo !== 'registro') acciones.abrirRegistro({});
+  if (que === 'registro') irAlRegistro();
 };
 if (NATIVO) document.documentElement.classList.add('nativa');
 
 navigator.serviceWorker?.addEventListener('message', (ev) => {
   if (ev.data?.tipo === 'respuesta-aviso') vuelcaPendientes();
-  if (ev.data?.tipo === 'abrir-registro' && real.perfil.alta && !ui.hoja) acciones.abrirRegistro({});
+  if (ev.data?.tipo === 'abrir-registro') irAlRegistro();
 });
 
 // Al volver a la app: se recogen respuestas de avisos, se refresca el día y se ofrece rellenar lo pendiente.
@@ -2620,10 +2682,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 pinta();
 // Quien ya había terminado la bienvenida pero no vio el recorrido (o lo dejó a medias) lo ve al entrar.
-if (!demo && real.perfil.alta && !real.perfil.recorrido && !new URLSearchParams(location.search).has('hoja')) empiezaRecorrido();
+if (!demo && real.perfil.alta && !real.perfil.recorrido && !PARAMETROS.has('hoja')) empiezaRecorrido();
 usaComodinSiToca();
 bonosPendientes();
 vuelcaPendientes().then(() => {
   // Si se abre directamente el registro (enlace del aviso), no se interrumpe con la oferta de días pendientes.
-  if (!new URLSearchParams(location.search).has('hoja')) setTimeout(ofreceRecuperacion, 400);
+  if (!PARAMETROS.has('hoja')) setTimeout(ofreceRecuperacion, 400);
 });

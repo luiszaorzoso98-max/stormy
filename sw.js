@@ -1,6 +1,6 @@
 // Servicio de trabajo: guarda la app en el dispositivo para que funcione sin conexión.
 // Al publicar una versión nueva, cambia VERSION para que los dispositivos se actualicen.
-const VERSION = 'stormy-2.5.0';
+const VERSION = 'stormy-2.6.0';
 const ARCHIVOS = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/app.js', './js/motor.js', './js/contenido.js', './js/datos.js', './js/asistente.js', './js/avisos.js', './js/cielo.js', './js/tienda.js', './js/respuestas.js', './js/navegador.js',
@@ -19,21 +19,32 @@ self.addEventListener('activate', (ev) => {
   );
 });
 
+// Solo se guardan en la caché los archivos de la app (ARCHIVOS), y siempre con una clave sin «?…»:
+// así una dirección con parámetros raros no llena la caché ni sustituye a index.html.
+const RUTAS = new Set(ARCHIVOS.map((a) => new URL(a, self.registration.scope).pathname));
+const claveDe = (url) => {
+  const u = new URL(url);
+  return u.origin + u.pathname;
+};
+
 // Red primero para tener siempre la última versión; si no hay conexión, se sirve la copia guardada.
 // `no-cache` obliga a revalidar con el servidor: así nunca se mezcla un archivo nuevo con otro viejo de la caché HTTP.
 self.addEventListener('fetch', (ev) => {
   const peticion = ev.request;
-  if (peticion.method !== 'GET' || new URL(peticion.url).origin !== location.origin) return;
+  const url = new URL(peticion.url);
+  if (peticion.method !== 'GET' || url.origin !== location.origin) return;
+  const propia = RUTAS.has(url.pathname);
+  const clave = claveDe(peticion.url);
   ev.respondWith(
     fetch(peticion, { cache: 'no-cache' })
       .then((res) => {
-        if (res.ok) {
+        if (propia && res.ok && res.type === 'basic') {
           const copia = res.clone();
-          caches.open(VERSION).then((c) => c.put(peticion, copia));
+          caches.open(VERSION).then((c) => c.put(clave, copia));
         }
         return res;
       })
-      .catch(() => caches.match(peticion, { ignoreSearch: true }).then((r) => r ?? caches.match('./index.html'))),
+      .catch(() => caches.match(clave).then((r) => r ?? caches.match(claveDe(new URL('./index.html', self.registration.scope).href)))),
   );
 });
 

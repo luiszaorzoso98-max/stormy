@@ -40,13 +40,14 @@ const ES_DIA = /^\d{4}-\d{2}-\d{2}$/;
 const ES_HORA = /^\d{2}:\d{2}$/;
 const nivel3 = (v) => ([1, 2, 3].includes(v) ? v : null);
 const texto = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+const MAX_ETIQUETAS = 8;
 const diaValido = (v) => (typeof v === 'string' && ES_DIA.test(v) && aIso(aNum(v)) === v ? v : null); // descarta fechas imposibles como el 31 de febrero
 
 function normalizaEntrada(e) {
   const animo = Math.round(Number(e?.animo));
   if (!(animo >= 1 && animo <= 5)) return null;
   let etiquetas = (Array.isArray(e.etiquetas) ? e.etiquetas : []).filter((x) => typeof x === 'string')
-    .map((x) => (x === 'Plan con amigas' ? 'Plan con amigos' : x.slice(0, 40)));
+    .map((x) => (x === 'Plan con amigas' ? 'Plan con amigos' : x));
   let juntos = nivel3(e.juntos);
   // La etiqueta antigua «Poco tiempo juntos» pasa a ser el dato «tiempo juntos: poco».
   if (etiquetas.includes('Poco tiempo juntos')) {
@@ -56,7 +57,8 @@ function normalizaEntrada(e) {
   return {
     animo, sueno: nivel3(e.sueno), estres: nivel3(e.estres), juntos,
     manana: MANANAS_VALIDAS.includes(e.manana) ? e.manana : null,
-    etiquetas: [...new Set(etiquetas)], nota: texto(e.nota, 280), regla: !!e.regla, orientativo: !!e.orientativo,
+    // Solo etiquetas conocidas y como mucho 8: un código pegado no puede colar textos raros ni listas enormes.
+    etiquetas: [...new Set(etiquetas)].filter((x) => ETIQUETAS.includes(x)).slice(0, MAX_ETIQUETAS), nota: texto(e.nota, 280), regla: !!e.regla, orientativo: !!e.orientativo,
   };
 }
 
@@ -65,7 +67,7 @@ function normalizaEntrada(e) {
  * Regla de migración: `perfil.nombre` pasa a `perfil.apodo`, la relación por defecto es «pareja» y los campos
  * nuevos de cada parte (`juntos`, `manana`, `orientativo`) nacen vacíos.
  */
-export function normaliza(e) {
+export function normaliza(e, hoy = hoyIso()) {
   const p = e?.perfil && typeof e.perfil === 'object' ? e.perfil : {};
   const base = perfilVacio();
   const relacion = RELACIONES.some(([id]) => id === p.relacion) ? p.relacion : 'pareja';
@@ -90,7 +92,8 @@ export function normaliza(e) {
   const entradas = {};
   const origen = e?.entradas && typeof e.entradas === 'object' ? e.entradas : {};
   for (const dia of Object.keys(origen).sort()) {
-    const n = diaValido(dia) && normalizaEntrada(origen[dia]);
+    // Los partes con fecha posterior a hoy no pueden existir: se descartan.
+    const n = diaValido(dia) && dia <= hoy && normalizaEntrada(origen[dia]);
     if (n) entradas[dia] = n;
   }
   // La tienda (objetos, rayos gastados, cofres): los estados antiguos no tenían, así que nace vacía.
@@ -214,10 +217,29 @@ const PREFIJO = 'STORMY1.';
 
 export const aCopia = (estado) => JSON.stringify({ app: 'stormy', formato: 2, ...estado }, null, 2);
 
+// Límites de lo que se acepta al importar: diez años de partes caben de sobra; algo mucho mayor no es una copia de Stormy.
+export const LIMITES = { texto: 200 * 1024, descomprimido: 2 * 1024 * 1024, partes: 3700 };
+export const ERRORES = {
+  grande: 'El código o la copia es demasiado grande para ser de Stormy.',
+  partes: 'La copia tiene demasiados partes para ser de Stormy.',
+  invalida: 'Esto no parece una copia ni un código de Stormy.',
+};
+
+const compruebaTamano = (texto) => {
+  if (String(texto).length > LIMITES.texto) throw new Error(ERRORES.grande);
+};
+
 /** Lee una copia en JSON. Lanza un error si no es una copia de Stormy. */
-export function deCopia(contenido) {
-  const e = JSON.parse(contenido);
-  if (!e || typeof e !== 'object' || typeof e.perfil !== 'object' || typeof e.entradas !== 'object') throw new Error('copia no válida');
+export function deCopia(contenido, { limitaTexto = true } = {}) {
+  if (limitaTexto) compruebaTamano(contenido);
+  let e;
+  try {
+    e = JSON.parse(contenido);
+  } catch {
+    throw new Error(ERRORES.invalida);
+  }
+  if (!e || typeof e !== 'object' || !e.perfil || typeof e.perfil !== 'object' || !e.entradas || typeof e.entradas !== 'object') throw new Error(ERRORES.invalida);
+  if (Object.keys(e.entradas).length > LIMITES.partes) throw new Error(ERRORES.partes);
   return normaliza(e);
 }
 
@@ -238,6 +260,35 @@ const aBase64url = (bytes) => {
 const deBase64url = (texto) => Uint8Array.from(atob(texto.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0));
 const flujo = async (bytes, transforma) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(transforma)).arrayBuffer());
 
+/** Descomprime leyendo poco a poco y corta en cuanto pasa de `maximo` bytes (evita las «bombas» de compresión). */
+async function descomprimeConLimite(bytes, transforma, maximo = LIMITES.descomprimido) {
+  const lector = new Blob([bytes]).stream().pipeThrough(transforma).getReader();
+  const trozos = [];
+  let total = 0;
+  for (;;) {
+    let paso;
+    try {
+      paso = await lector.read();
+    } catch {
+      throw new Error(ERRORES.invalida);
+    }
+    if (paso.done) break;
+    total += paso.value.byteLength;
+    if (total > maximo) {
+      lector.cancel().catch(() => {});
+      throw new Error(ERRORES.grande);
+    }
+    trozos.push(paso.value);
+  }
+  const salida = new Uint8Array(total);
+  let i = 0;
+  for (const t of trozos) {
+    salida.set(t, i);
+    i += t.byteLength;
+  }
+  return salida;
+}
+
 /** Código corto (comprimido) si el navegador sabe comprimir; si no, el de siempre. */
 export async function aCodigoCorto(estado) {
   if (typeof CompressionStream === 'undefined') return aCodigo(estado);
@@ -247,11 +298,18 @@ export async function aCodigoCorto(estado) {
 
 /** Lee cualquier código (comprimido o de los de antes). Lanza un error si no es válido. */
 export async function deCualquierCodigo(codigo) {
+  compruebaTamano(codigo);
   const limpio = String(codigo).replace(/\s+/g, '');
   if (!limpio.startsWith(PREFIJO2)) return deCodigo(limpio);
-  if (typeof DecompressionStream === 'undefined') throw new Error('este navegador no lee códigos comprimidos');
-  const bytes = await flujo(deBase64url(limpio.slice(PREFIJO2.length)), new DecompressionStream('deflate-raw'));
-  return deCopia(new TextDecoder().decode(bytes));
+  if (typeof DecompressionStream === 'undefined') throw new Error('Este navegador no lee códigos comprimidos.');
+  let comprimido;
+  try {
+    comprimido = deBase64url(limpio.slice(PREFIJO2.length));
+  } catch {
+    throw new Error(ERRORES.invalida);
+  }
+  const bytes = await descomprimeConLimite(comprimido, new DecompressionStream('deflate-raw'));
+  return deCopia(new TextDecoder().decode(bytes), { limitaTexto: false });
 }
 
 /** ¿Hay algo que merezca la pena llevarse? (bienvenida hecha o algún parte). */
@@ -264,19 +322,29 @@ export const tieneDatos = (estado) => !!estado.perfil.alta || Object.keys(estado
 export const ofrecerTraspaso = ({ instalada, estado, decidido, nativo = false }) => instalada && !nativo && !decidido && !tieneDatos(estado);
 
 export function deCodigo(codigo) {
+  compruebaTamano(codigo);
   const limpio = String(codigo).replace(/\s+/g, '');
-  if (!limpio.startsWith(PREFIJO)) throw new Error('código no válido');
-  const binario = atob(limpio.slice(PREFIJO.length).replaceAll('-', '+').replaceAll('_', '/'));
+  if (!limpio.startsWith(PREFIJO)) throw new Error(ERRORES.invalida);
+  let binario;
+  try {
+    binario = atob(limpio.slice(PREFIJO.length).replaceAll('-', '+').replaceAll('_', '/'));
+  } catch {
+    throw new Error(ERRORES.invalida);
+  }
   return deCopia(new TextDecoder().decode(Uint8Array.from(binario, (c) => c.charCodeAt(0))));
 }
 
 // ---------- Datos de ejemplo (modo demostración y vistas de ejemplo) ----------
 
+/** Días del modo demostración: entre 1 y 365 (30 si no es un número). */
+export const diasDeEjemplo = (n) => Math.min(365, Math.max(1, Math.trunc(Number(n)) || 30));
+
 /**
  * Estado de ejemplo con `dias` partes que terminan ayer: patrón cíclico, semanal y algo de ruido.
  * No toca el estado real: devuelve uno nuevo que solo vive en memoria.
  */
-export function ejemplo(dias = 30, perfilReal = perfilVacio(), hoyTexto = hoyIso()) {
+export function ejemplo(diasPedidos = 30, perfilReal = perfilVacio(), hoyTexto = hoyIso()) {
+  const dias = diasDeEjemplo(diasPedidos);
   const relacion = perfilReal.relacion ?? 'pareja';
   const hoy = aNum(hoyTexto);
   const inicio = hoy - (dias + 2);
@@ -328,4 +396,15 @@ export function ejemplo(dias = 30, perfilReal = perfilVacio(), hoyTexto = hoyIso
     if (regla) perfil.ultimaRegla = aIso(n);
   }
   return { perfil, entradas, tienda: tiendaVacia() };
+}
+
+// ---------- Ir directo al registro (avisos, alarma del calendario, acceso directo) ----------
+
+/**
+ * Decide adónde lleva un aviso: al registro de hoy, para editarlo si ya tiene parte.
+ * Devuelve null si aún no se ha terminado la bienvenida o si se está en el modo demostración.
+ */
+export function rutaAlRegistro(estado, { demo = false, hoy = hoyIso() } = {}) {
+  if (demo || !estado?.perfil?.alta) return null;
+  return { dia: hoy, editar: !!estado.entradas?.[hoy] };
 }
