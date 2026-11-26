@@ -1091,7 +1091,7 @@ const PRIVACIDAD = [
 const RECORRIDO = [
   ['[data-guia="registrar"]', 'Registrar', 'Aquí apuntas el parte de cada día. Un toque y queda guardado.'],
   ['[data-guia="progreso"]', 'Progreso', 'Cada día apuntado llena los anillos. Aquí ves cuánto falta para el siguiente premio.'],
-  ['#nimbo', 'Stormy', 'Aquí estoy yo. Pregúntame por hoy, por mañana o por lo que influye en casa.'],
+  ['[data-guia="nimbo"]', 'Stormy', 'Aquí estoy yo. Pregúntame por hoy, por mañana o por lo que influye en casa.'],
 ];
 
 function pintaGuia() {
@@ -1137,7 +1137,7 @@ function terminaRecorrido() {
 // ---------- Pintado ----------
 
 const VISTAS = { hoy: vistaHoy, calendario: vistaCalendario, descubrimientos: vistaDescubrimientos, ajustes: vistaAjustes };
-const PESTANAS = [['hoy', 'Hoy', 'hoy'], ['calendario', 'Calendario', 'calendario'], ['descubrimientos', 'Descubrimientos', 'grafico'], ['ajustes', 'Ajustes', 'ajustes']];
+const PESTANAS = [['hoy', 'Hoy', 'hoy'], ['calendario', 'Calendario', 'calendario'], ['descubrimientos', 'Descubre', 'grafico'], ['ajustes', 'Ajustes', 'ajustes']];
 
 function pinta({ arriba = false } = {}) {
   const vista = $('#vista');
@@ -1173,12 +1173,11 @@ function pinta({ arriba = false } = {}) {
   }
 
   $('#franja').hidden = !demo;
-  $('#barra').innerHTML = alta
-    ? PESTANAS.map(([id, nombre, icono]) => `<button type="button" class="${ui.pestana === id ? 'on' : ''}" ${ui.pestana === id ? 'aria-current="page"' : ''} data-accion="pestana" data-id="${id}">${ICONOS[icono]}<span>${nombre}</span></button>`).join('')
-    : '';
+  // Barra simétrica de cinco huecos iguales: dos pestañas, Stormy en el centro y otras dos pestañas.
+  const pestana = ([id, nombre, icono]) => `<button type="button" class="${ui.pestana === id ? 'on' : ''}" ${ui.pestana === id ? 'aria-current="page"' : ''} data-accion="pestana" data-id="${id}">${ICONOS[icono]}<span>${nombre}</span></button>`;
+  const centro = `<button type="button" class="centro" data-accion="abrirNimbo" data-guia="nimbo" aria-label="Hablar con Stormy, tu predictor de tormentas">${avatarNimbo(54, stormyEspecial())}<span>Stormy</span></button>`;
+  $('#barra').innerHTML = alta ? [...PESTANAS.slice(0, 2).map(pestana), centro, ...PESTANAS.slice(2).map(pestana)].join('') : '';
   $('#barra').hidden = !alta;
-  $('#nimbo').innerHTML = alta ? avatarNimbo(52, stormyEspecial()) : '';
-  $('#nimbo').hidden = !alta;
   scrollTo(0, y);
   pintaGuia();
 }

@@ -81,7 +81,7 @@ body.con-cielo main { --foco: var(--sobre); }
 
 #vista { max-width: var(--ancho); margin: 0 auto; }
 
-main { display: flex; flex-direction: column; gap: 14px; padding: calc(var(--sat) + 14px) 18px calc(var(--sal) + 100px); }
+main { display: flex; flex-direction: column; gap: 14px; padding: calc(var(--sat) + 14px) 18px var(--hueco-barra); }
 
 .con-margen { margin-top: 12px; }
 .sin-margen { margin-top: 0 !important; }
@@ -270,7 +270,7 @@ body.en-demo main { padding-top: calc(var(--sat) + 52px); }
 
 /* ---------- Hoy ---------- */
 
-main.hoy { color: var(--sobre); gap: 10px; padding-bottom: calc(var(--sal) + 92px); }
+main.hoy { color: var(--sobre); gap: 10px; padding-bottom: var(--hueco-barra); }
 .cabecera { display: flex; align-items: center; gap: 4px; }
 .cabecera > div { flex: 1; min-width: 0; }
 .cabecera h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.15; overflow-wrap: anywhere; }
@@ -628,32 +628,42 @@ textarea.codigo { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
 
 /* ---------- Barra inferior ---------- */
 
+/* Barra flotante y simétrica: cinco huecos iguales con Stormy en el centro, un poco por encima del borde.
+   Se apoya sobre la zona del indicador de inicio (app instalada o nativa) o sobre la barra de Safari. */
+:root {
+  --barra-abajo: max(10px, calc(var(--sal) - 12px));
+  --hueco-barra: calc(var(--barra-abajo) + 96px); /* barra (64) + lo que asoma Stormy (18) + aire */
+}
 #barra {
-  position: fixed; left: 50%; bottom: calc(var(--sal) + 12px); transform: translateX(-50%);
-  /* Deja sitio a la derecha para el botón de Stormy, que va a la misma altura y no tapa el contenido. */
-  width: min(calc(100% - 24px), calc(var(--ancho) - 36px));
-  display: flex; padding: 5px 62px 5px 5px; border-radius: 34px; z-index: 10;
+  position: fixed; left: 50%; bottom: var(--barra-abajo); transform: translateX(-50%); z-index: 10;
+  width: min(calc(100% - 24px), calc(var(--ancho) - 24px));
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end;
+  padding: 6px; border-radius: 32px;
   background: var(--cristal); -webkit-backdrop-filter: blur(26px) saturate(1.8); backdrop-filter: blur(26px) saturate(1.8);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--linea);
 }
 #barra[hidden] { display: none; }
-#barra button { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 0 6px; border-radius: 29px; font-size: 13px; font-weight: 600; color: var(--texto); transition: background 0.2s, color 0.2s; min-width: 0; }
-#barra button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#barra button {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px;
+  min-width: 0; min-height: 52px; padding: 6px 0 5px; border-radius: 26px;
+  font-size: 13px; font-weight: 600; letter-spacing: -0.1px; color: var(--texto); transition: background 0.2s, color 0.2s;
+}
+#barra button > svg { width: 22px; height: 22px; }
+#barra button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.1; }
 #barra button.on { color: var(--acento-texto); background: var(--relleno); }
-#barra button:active { transform: scale(0.96); }
+#barra button:active { transform: scale(0.95); }
+#barra button.centro { position: relative; }
+#barra .centro .avatar-nimbo {
+  margin-top: -28px; box-shadow: 0 6px 16px rgba(30, 39, 73, 0.24), 0 0 0 4px var(--tarjeta);
+  transition: transform 0.18s var(--sale);
+}
+#barra .centro:active { transform: none; }
+#barra .centro:active .avatar-nimbo { transform: scale(0.92); }
 
 /* ---------- Stormy ---------- */
 
 .avatar-nimbo { flex: none; display: inline-grid; place-items: center; border-radius: 50%; background: linear-gradient(#8EE0C8, #B4ECD9); }
 .avatar-nimbo.especial { background: linear-gradient(#FFC94D, #FFDB80); }
-#nimbo {
-  position: fixed; z-index: 11; bottom: calc(var(--sal) + 17px); right: max(17px, calc(50% - var(--ancho) / 2 + 23px));
-  border-radius: 50%; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24), 0 0 0 3px rgba(255, 255, 255, 0.85);
-  transition: transform 0.16s var(--sale);
-}
-#nimbo[hidden] { display: none; }
-#nimbo:active { transform: scale(0.92); }
-body.con-hoja #nimbo { display: none; }
 
 .nimbo-cab { align-items: center; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--linea); }
 .nimbo-cab > div { flex: 1; }
@@ -735,7 +745,7 @@ body.con-hoja #nimbo { display: none; }
 /* ---------- Aviso breve ---------- */
 
 #aviso {
-  position: fixed; left: 50%; bottom: calc(var(--sal) + 96px); transform: translate(-50%, 16px); z-index: 30;
+  position: fixed; left: 50%; bottom: calc(var(--hueco-barra) + 4px); transform: translate(-50%, 16px); z-index: 30;
   background: rgba(20, 20, 24, 0.92); color: #fff; font-size: 14px; font-weight: 600; padding: 11px 18px; border-radius: 99px;
   opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.3s var(--sale); max-width: calc(100% - 40px); text-align: center;
 }
@@ -762,9 +772,16 @@ body.con-hoja #nimbo { display: none; }
   .descubrimientos { gap: 10px; }
   .destacada { min-height: 0; padding: 12px; }
 }
-@media (max-height: 740px) {
+@media (max-height: 760px) {
+  main.hoy { gap: 6px; }
+  .cabecera h1 { font-size: 22px; }
+  .disco { width: 60px; height: 60px; }
+  .disco svg { width: 46px; height: 46px; }
+  .heroe { gap: 4px; }
+  .heroe h2 { font-size: 26px; }
+  .tarjeta.compacta { padding: 8px 14px; }
   .compacta .texto { line-height: 1.25; }
-  .semana .ficha, .semana .bloqueo { width: 30px !important; height: 30px !important; border-radius: 9px !important; }
+  .semana .ficha, .semana .bloqueo { width: 28px !important; height: 28px !important; border-radius: 9px !important; }
   .semana .ficha svg { width: 20px; height: 20px; }
   .anillos .anillo { transform: scale(0.9); margin: -2px; }
   .descubrimientos .circulo .anillo { width: 56px !important; height: 56px !important; }
