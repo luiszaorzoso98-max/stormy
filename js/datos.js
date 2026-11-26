@@ -207,6 +207,8 @@ export function fusionaRespuestas(estado, respuestas) {
 }
 
 // ---------- Copia de seguridad y código de traspaso ----------
+// Dos formatos: «STORMY1.» (JSON en base64url, el de siempre) y «STORMY2.» (JSON comprimido con deflate),
+// más corto. Se leen los dos. El código nunca sale del dispositivo salvo que la persona lo copie y lo pegue.
 
 const PREFIJO = 'STORMY1.';
 
@@ -226,6 +228,40 @@ export function aCodigo(estado) {
   for (const b of bytes) binario += String.fromCharCode(b);
   return PREFIJO + btoa(binario).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
+
+const PREFIJO2 = 'STORMY2.';
+const aBase64url = (bytes) => {
+  let binario = '';
+  for (const b of bytes) binario += String.fromCharCode(b);
+  return btoa(binario).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+};
+const deBase64url = (texto) => Uint8Array.from(atob(texto.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0));
+const flujo = async (bytes, transforma) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(transforma)).arrayBuffer());
+
+/** Código corto (comprimido) si el navegador sabe comprimir; si no, el de siempre. */
+export async function aCodigoCorto(estado) {
+  if (typeof CompressionStream === 'undefined') return aCodigo(estado);
+  const bytes = new TextEncoder().encode(JSON.stringify(estado));
+  return PREFIJO2 + aBase64url(await flujo(bytes, new CompressionStream('deflate-raw')));
+}
+
+/** Lee cualquier código (comprimido o de los de antes). Lanza un error si no es válido. */
+export async function deCualquierCodigo(codigo) {
+  const limpio = String(codigo).replace(/\s+/g, '');
+  if (!limpio.startsWith(PREFIJO2)) return deCodigo(limpio);
+  if (typeof DecompressionStream === 'undefined') throw new Error('este navegador no lee códigos comprimidos');
+  const bytes = await flujo(deBase64url(limpio.slice(PREFIJO2.length)), new DecompressionStream('deflate-raw'));
+  return deCopia(new TextDecoder().decode(bytes));
+}
+
+/** ¿Hay algo que merezca la pena llevarse? (bienvenida hecha o algún parte). */
+export const tieneDatos = (estado) => !!estado.perfil.alta || Object.keys(estado.entradas).length > 0;
+
+/**
+ * Al abrir la app instalada por primera vez, sin datos: ofrecer pegar el código del navegador.
+ * @param {{instalada: boolean, estado: object, decidido: boolean, nativo?: boolean}} o
+ */
+export const ofrecerTraspaso = ({ instalada, estado, decidido, nativo = false }) => instalada && !nativo && !decidido && !tieneDatos(estado);
 
 export function deCodigo(codigo) {
   const limpio = String(codigo).replace(/\s+/g, '');

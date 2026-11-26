@@ -1,6 +1,6 @@
 // Servicio de trabajo: guarda la app en el dispositivo para que funcione sin conexión.
 // Al publicar una versión nueva, cambia VERSION para que los dispositivos se actualicen.
-const VERSION = 'stormy-2.4.0';
+const VERSION = 'stormy-2.5.0';
 const ARCHIVOS = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/app.js', './js/motor.js', './js/contenido.js', './js/datos.js', './js/asistente.js', './js/avisos.js', './js/cielo.js', './js/tienda.js', './js/respuestas.js', './js/navegador.js',

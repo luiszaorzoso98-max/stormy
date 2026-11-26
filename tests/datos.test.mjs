@@ -206,3 +206,38 @@ test('el aviso diario nativo se guarda en el perfil y nace apagado', () => {
   assert.equal(normaliza({ perfil: { avisoActivo: true } }).perfil.avisoActivo, true);
   assert.equal(normaliza(ANTIGUO).perfil.avisoActivo, false);
 });
+
+test('código de traspaso corto (comprimido): ida y vuelta con la tienda y los regalos; lee también los antiguos', async () => {
+  const { aCodigoCorto, deCualquierCodigo } = await import('../js/datos.js');
+  const e = normaliza(ANTIGUO);
+  e.tienda.comprados = ['gafas', 'telediario'];
+  e.tienda.equipado.cara = 'gafas';
+  e.tienda.eventos = [{ clave: 'nivel-7', dia: HOY, motivo: 'Nivel del día 7', cantidad: 100 }];
+  e.tienda.gastados = 40;
+  e.entradas['2026-11-21'].nota = 'Día raro ⛈️ y cañas';
+  const corto = await aCodigoCorto(e);
+  assert.match(corto, /^STORMY2\.[A-Za-z0-9_-]+$/);
+  assert.deepEqual(await deCualquierCodigo(corto), e);
+  assert.deepEqual(await deCualquierCodigo(corto.replace(/(.{30})/g, '$1\n')), e);
+  // Un código del formato anterior se sigue leyendo.
+  assert.deepEqual(await deCualquierCodigo(aCodigo(e)), e);
+  // Con muchos días, el comprimido es bastante más corto.
+  const grande = ejemplo(60, undefined, HOY);
+  assert.ok((await aCodigoCorto(grande)).length < aCodigo(grande).length * 0.5);
+  await assert.rejects(deCualquierCodigo('STORMY2.nonono'));
+  await assert.rejects(deCualquierCodigo('hola'));
+});
+
+test('cuándo ofrecer pegar el código al abrir la app instalada', async () => {
+  const { ofrecerTraspaso, tieneDatos } = await import('../js/datos.js');
+  const vacio = normaliza({});
+  const conDatos = normaliza({ perfil: { alta: true } });
+  assert.equal(tieneDatos(vacio), false);
+  assert.equal(tieneDatos(conDatos), true);
+  assert.equal(tieneDatos(normaliza({ entradas: { [HOY]: { animo: 3 } } })), true);
+  assert.equal(ofrecerTraspaso({ instalada: true, estado: vacio, decidido: false }), true);
+  assert.equal(ofrecerTraspaso({ instalada: false, estado: vacio, decidido: false }), false); // en el navegador, no
+  assert.equal(ofrecerTraspaso({ instalada: true, estado: conDatos, decidido: false }), false); // ya hay datos
+  assert.equal(ofrecerTraspaso({ instalada: true, estado: vacio, decidido: true }), false); // ya eligió
+  assert.equal(ofrecerTraspaso({ instalada: true, estado: vacio, decidido: false, nativo: true }), false); // app nativa
+});

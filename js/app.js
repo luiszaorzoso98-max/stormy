@@ -18,7 +18,7 @@ import { capacidad, muestraAviso, pidePermiso, recogePendientes } from './avisos
 import { faseLunar } from './cielo.js';
 import { GUIAS, ORDEN_GUIAS, detectaNavegador, enlaceChrome } from './navegador.js';
 import {
-  PARENTESCOS, RELACIONES, aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
+  PARENTESCOS, RELACIONES, aCodigo, aCodigoCorto, aCopia, deCualquierCodigo, ofrecerTraspaso, tieneDatos, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
   extrasDe, fusionaRespuestas, guardar, muestrasDe, rachaDe, rayosDeEstado, rayosDisponibles, reglasDe, totalExtras,
 } from './datos.js';
 
@@ -257,11 +257,27 @@ function pasosGuia(clave) {
   return `${boton}<ol class="pasos-instalar">${g.pasos.map(([t, x, d], i) => `<li class="tarjeta cristal"><div class="paso-cab"><span class="num">${i + 1}</span><div><strong>${t}</strong><p>${x}</p></div></div>${mockPaso(d)}</li>`).join('')}</ol>`;
 }
 
+// En el navegador, antes de instalar: la app de la pantalla de inicio guarda sus datos aparte (en iPhone, siempre),
+// así que se copia el código de traspaso para pegarlo al abrirla.
+const hayQueLlevarse = () => !NATIVO && !enPantallaDeInicio() && !demo && tieneDatos(real);
+function preparaCodigo() {
+  if (ui.codigoListo || ui.preparandoCodigo) return;
+  ui.preparandoCodigo = true;
+  aCodigoCorto(real).then((c) => { ui.codigoListo = c; }).catch(() => { ui.codigoListo = aCodigo(real); }).finally(() => { ui.preparandoCodigo = false; });
+}
+function bloqueGuardarProgreso() {
+  if (!hayQueLlevarse()) return '';
+  preparaCodigo();
+  return `<div class="tarjeta guardar-progreso"><p class="sobre">Antes de instalar: guarda tu progreso</p>
+    <p class="nota sin-margen">Al abrir Stormy desde el icono, pégalo y seguirás donde lo dejaste.</p>
+    <button type="button" class="principal ${ui.codigoCopiado ? 'suave' : ''}" data-accion="copiarMiCodigo">${ui.codigoCopiado ? `${ICONOS.visto}Código copiado` : `${ICONOS.copiar}Copiar mi código`}</button></div>`;
+}
+
 function guiaInstalar() {
   const clave = guiaActual();
   const detectada = nav().guia;
   const otras = ORDEN_GUIAS.map(([grupo, claves]) => `<optgroup label="${grupo}">${claves.map((c) => `<option value="${c}" ${c === clave ? 'selected' : ''}>${GUIAS[c].nombre}${c === detectada ? ' (el tuyo)' : ''}</option>`).join('')}</optgroup>`).join('');
-  return `<p class="guia-de">Pasos para <strong>${GUIAS[clave].nombre}</strong></p>
+  return `${bloqueGuardarProgreso()}<p class="guia-de">Pasos para <strong>${GUIAS[clave].nombre}</strong></p>
     ${pasosGuia(clave)}
     <label class="otro-navegador"><span>¿Usas otro navegador?</span><select data-modelo="ui.guia" aria-label="Elegir navegador">${otras}</select></label>`;
 }
@@ -270,7 +286,31 @@ function guiaInstalar() {
 const faltaInstalar = () => !NATIVO && !enPantallaDeInicio() && (esIOS() || esAndroid());
 const POR_QUE_INSTALAR = 'Sin instalarla no hay avisos, y el navegador puede borrar tus partes si pasas unos días sin abrirla.';
 
+const CLAVE_TRASPASO = 'stormy.traspasoDecidido';
+const traspasoDecidido = () => { try { return localStorage.getItem(CLAVE_TRASPASO) === '1'; } catch { return false; } };
+
+/** Primera vez en la app instalada, sin datos: ¿traes los del navegador? */
+function pantallaTraspaso() {
+  return `<main class="bienvenida traspaso">
+    <div class="paso" data-paso="traspaso">
+      <div class="presentacion">${stormyPortada(110)}
+        <h1 class="titulo-traspaso">¿Ya usabas Stormy en el navegador?</h1>
+        <p class="explica">Si copiaste tu código antes de instalar, pégalo y seguirás donde lo dejaste: días, niveles y rayos.</p></div>
+      ${ui.traspasoManual ? `<label class="campo"><span>Pega aquí tu código</span><textarea class="caja codigo" id="codigo-traspaso" rows="4" placeholder="STORMY…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea></label>` : ''}
+      ${ui.traspasoError ? `<p class="aviso-error" role="alert">${ui.traspasoError}</p>` : ''}
+    </div>
+    <footer class="pie">
+      <button class="principal" data-accion="${ui.traspasoManual ? 'usarCodigoTraspaso' : 'pegarCodigoTraspaso'}">${ICONOS.copiar}<span>${ui.traspasoManual ? 'Recuperar mis datos' : 'Pegar mi código'}</span></button>
+      <button class="secundario" data-accion="empezarDeCero">Empezar de cero</button>
+    </footer>
+  </main>`;
+}
+
 function bienvenida() {
+  if (ofrecerTraspaso({ instalada: enPantallaDeInicio(), estado: real, decidido: traspasoDecidido(), nativo: NATIVO }) && !demo) {
+    ui.pasoPintado = 'traspaso';
+    return pantallaTraspaso();
+  }
   const a = ui.alta;
   const fila = (icono, titulo, texto) =>
     `<div class="fila"><span class="acento">${ICONOS[icono]}</span><div><strong>${titulo}</strong><p>${texto}</p></div></div>`;
@@ -346,7 +386,7 @@ function bienvenida() {
         ? `<button class="principal" data-accion="terminar" data-aviso="1">Activar aviso y empezar</button>
            <button class="secundario" data-accion="terminar">Empezar sin aviso</button>`
         : id === 'instalar' && (esIOS() || esAndroid())
-          ? `<button class="principal" data-accion="siguiente">Ya la he instalado</button>
+          ? `<button class="principal" data-accion="yaInstalada">Ya la he instalado</button>
              <button class="enlace-pequeno" data-accion="instalarLuego">Ahora no</button>`
           : `<button class="principal" data-accion="siguiente" ${bloqueado ? 'disabled' : ''}>${ui.paso === 0 ? 'Empezar' : 'Continuar'}</button>
            ${ui.paso > 0 ? '<button class="secundario" data-accion="atras">Atrás</button>' : ''}`}
@@ -1072,7 +1112,7 @@ function preguntaANimbo(texto) {
 function hojaConfirmar() {
   const c = ui.hoja;
   return `<div class="hoja-cuerpo celebracion"><h2>${c.titulo}</h2><p>${c.texto}</p></div>
-    <div class="hoja-pie"><button class="principal ${c.suave ? '' : 'peligro'}" data-accion="${c.accion}">${c.boton}</button><button class="secundario oscuro" data-accion="${c.accion2 ?? 'cerrarHoja'}">${c.cancelar ?? 'Cancelar'}</button></div>`;
+    <div class="hoja-pie"><button class="principal ${c.suave ? '' : 'peligro'}" data-accion="${c.accion}">${c.boton}</button>${c.cancelar === false ? '' : `<button class="secundario oscuro" data-accion="${c.accion2 ?? 'cerrarHoja'}">${c.cancelar ?? 'Cancelar'}</button>`}</div>`;
 }
 
 function hojaTexto() {
@@ -1085,11 +1125,11 @@ function hojaCodigo() {
   const ver = ui.hoja.modo === 'ver';
   return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
     <div class="hoja-cuerpo">
-      <h2>${ver ? 'Código de traspaso' : 'Tengo un código'}</h2>
+      <h2>${ver ? 'Mi código de traspaso' : 'Pegar mi código'}</h2>
       <p class="fecha">${ver
-        ? 'Son tus datos convertidos en texto. Cópialo, envíatelo como prefieras y pégalo en Stormy en el otro móvil (Ajustes → «Tengo un código de traspaso»). No pasa por ningún servidor de Stormy.'
-        : 'Pega aquí el código que copiaste en el otro móvil.'}</p>
-      <textarea class="caja codigo" id="codigo" rows="6" ${ver ? 'readonly' : 'placeholder="STORMY1.…"'} aria-label="Código de traspaso" autocomplete="off" autocapitalize="off" spellcheck="false">${ver ? esc(aCodigo(real)) : ''}</textarea>
+        ? 'Son tus datos convertidos en texto. Cópialo y pégalo en la app instalada o en otro móvil (Ajustes → «Pegar mi código»). No pasa por ningún servidor de Stormy.'
+        : 'Pega aquí el código que copiaste en el navegador o en el otro móvil.'}</p>
+      <textarea class="caja codigo" id="codigo" rows="6" ${ver ? 'readonly' : 'placeholder="STORMY1.…"'} aria-label="Código de traspaso" autocomplete="off" autocapitalize="off" spellcheck="false">${ver ? esc(ui.codigoListo ?? aCodigo(real)) : ''}</textarea>
       ${ver ? '<p class="nota sin-margen">Incluye todo lo apuntado, también el ciclo si está activado. Trátalo como algo privado.</p>' : ''}
     </div>
     <div class="hoja-pie"><button class="principal" data-accion="${ver ? 'copiarCodigo' : 'usarCodigo'}">${ver ? 'Copiar código' : 'Recuperar datos'}</button></div>`;
@@ -1495,15 +1535,10 @@ function vistaAjustes() {
   const p = E().perfil;
   let instalar = '';
   if (!enPantallaDeInicio() && !NATIVO) {
-    instalar = `<h2 class="seccion">Instalar</h2><div class="tarjeta lista">${
-      ui.instalar
-        ? '<button type="button" class="enlace" data-accion="instalar">Instalar en este dispositivo</button>'
-        : `<p class="nota">${esIOS()
-            ? enAppAjena()
-              ? 'Ábrelo en Safari: desde dentro de otra app no se puede instalar.'
-              : 'En Safari, toca el botón Compartir y elige «Añadir a pantalla de inicio». Se abrirá como una app y funcionará sin conexión.'
-            : 'En el menú del navegador, elige «Instalar aplicación» o «Añadir a pantalla de inicio». Funcionará sin conexión.'}</p>`
-    }</div>`;
+    instalar = `<h2 class="seccion">Instalar</h2><div class="tarjeta lista">
+      ${ui.instalar ? '<button type="button" class="enlace" data-accion="instalar">Instalar en este dispositivo</button>' : ''}
+      <button type="button" class="enlace neutro" data-accion="verInstalar">Cómo instalar Stormy<span>${ICONOS.derecha}</span></button></div>
+      <p class="pie-seccion">Con tus datos: antes de instalar, copia tu código y pégalo al abrir la app.</p>`;
   }
   return `<main class="pagina">
     <h1>Ajustes</h1>
@@ -1563,8 +1598,8 @@ function vistaAjustes() {
     <div class="tarjeta lista">
       <button type="button" class="enlace" data-accion="exportar">Guardar copia</button>
       <button type="button" class="enlace" data-accion="recuperarCopia">Recuperar copia</button>
-      <button type="button" class="enlace" data-accion="verCodigo">Código de traspaso a otro móvil</button>
-      <button type="button" class="enlace" data-accion="pegarCodigo">Tengo un código de traspaso</button>
+      <button type="button" class="enlace" data-accion="verCodigo">Copiar mi código (para la app instalada u otro móvil)</button>
+      <button type="button" class="enlace" data-accion="pegarCodigo">Pegar mi código</button>
       <button type="button" class="enlace peligro" data-accion="pedirBorrarPartes">Borrar mis partes</button>
       <button type="button" class="enlace peligro" data-accion="pedirBorrarTodo">Borrar todo y empezar de cero</button>
     </div>
@@ -2265,7 +2300,61 @@ const acciones = {
     $('#fichero').click();
   },
   verCodigo() {
+    preparaCodigo();
     abreHoja({ tipo: 'codigo', modo: 'ver' });
+    setTimeout(() => ui.hoja?.tipo === 'codigo' && pintaHoja(), 300);
+  },
+  /** Copia el código ya preparado dentro del propio toque (Safari exige el gesto para escribir en el portapapeles). */
+  copiarMiCodigo() {
+    const codigo = ui.codigoListo ?? aCodigo(real);
+    navigator.clipboard?.writeText(codigo).then(() => {
+      ui.codigoCopiado = true;
+      avisa('Código copiado');
+      if (ui.hoja) pintaHoja(); else pinta();
+    }).catch(() => abreHoja({ tipo: 'codigo', modo: 'ver' }));
+  },
+  yaInstalada() {
+    if (hayQueLlevarse() && !ui.codigoCopiado) acciones.copiarMiCodigo();
+    acciones.siguiente();
+  },
+  async pegarCodigoTraspaso() {
+    let texto = '';
+    try {
+      texto = await navigator.clipboard.readText();
+    } catch {
+      /* sin permiso o sin portapapeles: se pega a mano */
+    }
+    if (!texto?.trim()) {
+      ui.traspasoManual = true;
+      ui.traspasoError = 'No he podido leer el portapapeles. Pega el código aquí abajo.';
+      return pinta({ arriba: true });
+    }
+    await acciones.restauraTraspaso(texto);
+  },
+  async usarCodigoTraspaso() {
+    await acciones.restauraTraspaso($('#codigo-traspaso')?.value ?? '');
+  },
+  async restauraTraspaso(texto) {
+    try {
+      const estado = await deCualquierCodigo(texto);
+      real = estado;
+      guardar(real);
+      try { localStorage.setItem(CLAVE_TRASPASO, '1'); } catch { /* sin almacenamiento */ }
+      Object.assign(ui, { traspasoManual: false, traspasoError: null, pestana: 'hoy', paso: 0 });
+      pinta({ arriba: true });
+      const dias = Object.keys(real.entradas).length;
+      abreHoja({ tipo: 'confirmar', suave: true, titulo: '¡Todo recuperado!', texto: `${dias === 1 ? 'Un día apuntado' : `${dias} días apuntados`} y ${rayosDisponibles(real)} rayos. Sigues donde lo dejaste.`, boton: 'Ir a Hoy', accion: 'cerrarHoja', cancelar: false });
+    } catch {
+      ui.traspasoManual = true;
+      ui.traspasoError = 'Ese código no es de Stormy o está incompleto. Vuelve a copiarlo en el navegador y pégalo otra vez.';
+      pinta({ arriba: true });
+    }
+  },
+  empezarDeCero() {
+    try { localStorage.setItem(CLAVE_TRASPASO, '1'); } catch { /* sin almacenamiento */ }
+    ui.traspasoManual = false;
+    ui.traspasoError = null;
+    pinta({ arriba: true });
   },
   pegarCodigo() {
     if (demo) return avisaDemo();
@@ -2274,9 +2363,9 @@ const acciones = {
   copiarCodigo() {
     copia($('#codigo').value, 'Código copiado');
   },
-  usarCodigo() {
+  async usarCodigo() {
     try {
-      proponeCopia(deCodigo($('#codigo').value));
+      proponeCopia(await deCualquierCodigo($('#codigo').value));
     } catch {
       avisa('Ese código no es de Stormy o está incompleto');
     }

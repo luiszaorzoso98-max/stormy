@@ -1197,6 +1197,11 @@ button.pieza { font: inherit; color: inherit; cursor: pointer; }
 .otro-navegador select { min-height: 44px; padding: 8px 10px; border: 0; border-radius: 12px; background: var(--tarjeta); color: var(--texto); font: inherit; font-weight: 600; }
 a.principal { text-decoration: none; }
 
+.guardar-progreso { display: flex; flex-direction: column; gap: 10px; box-shadow: inset 0 0 0 2px var(--mango); }
+.guardar-progreso .sobre { color: var(--texto); font-size: 15px; }
+.titulo-traspaso { font-size: 28px; font-weight: 800; line-height: 1.15; }
+.aviso-error { padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.85); color: #9B1C2A; font-size: 14px; font-weight: 700; }
+
 /* ---------- Franja de la escena en «Hoy» ----------
    La pantalla «Hoy» ocupa el alto visible; la franja se queda con el hueco libre entre la última tarjeta y la barra.
    Las figuras se dibujan con el alto de la franja y nunca salen de ella, así que no tapan texto ni botones. */
