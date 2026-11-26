@@ -149,3 +149,37 @@ test('varía las frases según el turno y aguanta entradas raras', () => {
   assert.equal(responder('   ¿¿??  ', c).tema, 'vacio');
   assert.ok(responder('<script>alert(1)</script>', c).texto.length > 0);
 });
+
+test('la tienda: Stormy responde a cada pregunta, con los datos de la tienda', async () => {
+  const { tiendaVacia, COLECCIONABLES } = await import('../js/tienda.js');
+  const c = { ...contexto(20), tienda: { ...tiendaVacia(), comprados: ['gafas'], pity: { sinRaro: 2, sinLegendario: 17 } }, ganados: 250 };
+  const q = (p) => responder(p, c);
+  assert.equal(q('¿Qué hay en la tienda?').tema, 'tienda');
+  assert.match(q('¿Qué hay en la tienda?').texto, /250 rayos/);
+  assert.equal(q('¿Cuántos rayos tengo?').tema, 'tienda-saldo');
+  assert.match(q('¿Cuántos rayos tengo?').texto, /Tienes 250 rayos/);
+  assert.equal(q('¿Qué me falta por conseguir?').tema, 'tienda-falta');
+  assert.match(q('¿Qué me falta por conseguir?').texto, new RegExp(`Te faltan ${COLECCIONABLES.length - 1} de ${COLECCIONABLES.length}`));
+  assert.match(q('¿Qué me falta por conseguir?').texto, /en la tienda.*solo en cofres/);
+  assert.equal(q('¿Qué probabilidad hay de legendario?').tema, 'tienda-probabilidad');
+  assert.match(q('¿Qué probabilidad hay de legendario?').texto, /5 %.*15 %.*30 %/);
+  assert.equal(q('¿Cuándo me toca un legendario seguro?').tema, 'tienda-garantia');
+  assert.match(q('¿Cuándo me toca un legendario seguro?').texto, /en 3 cofres/);
+  assert.equal(q('¿Qué me recomiendas comprar?').tema, 'tienda-consejo');
+  // Legendario garantizado cerca (3 cofres) y rayos para un cofre: recomienda el cofre.
+  assert.match(q('¿Qué me recomiendas comprar?').texto, /cofre de nube/);
+  // Lejos de la garantía: lo más barato que aún no tiene.
+  const lejos = { ...c, tienda: { ...c.tienda, pity: { sinRaro: 0, sinLegendario: 0 } } };
+  assert.match(responder('¿Qué me recomiendas comprar?', lejos).texto, /bigote/);
+  // Con todo lo de la tienda, solo recomienda cofres; nunca un exclusivo.
+  const todoTienda = { ...c, tienda: { ...c.tienda, comprados: COLECCIONABLES.filter((o) => o.via === 'tienda').map((o) => o.id), pity: { sinRaro: 0, sinLegendario: 0 } } };
+  assert.match(responder('¿Qué me recomiendas comprar?', todoTienda).texto, /solo sale en cofres.*cofre de nube/);
+  for (const o of COLECCIONABLES.filter((x) => x.via === 'cofre')) assert.doesNotMatch(responder('¿Qué me recomiendas comprar?', lejos).texto, new RegExp(o.nombre, 'i'));
+  assert.equal(q('¿Cómo gano rayos?').tema, 'tienda-ganar');
+  assert.match(q('¿Cómo gano rayos?').texto, /10 por cada parte/);
+  assert.match(q('¿Cómo gano rayos?').texto, /día 7, \+100.*hoy te quedan 25/);
+  assert.ok(sugerenciasDe({}).includes('¿Qué hay en la tienda?'));
+  // Las preguntas de siempre siguen yendo a su sitio.
+  assert.equal(q('dame un consejo').tema, 'consejo');
+  assert.equal(q('¿Cuándo propongo un plan?').tema, 'plan');
+});

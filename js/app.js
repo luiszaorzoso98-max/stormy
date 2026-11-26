@@ -5,14 +5,20 @@ import {
 } from './motor.js';
 import {
   APP, AVISO_CICLO, CADA_PERSONA, textosConoceCiclo, ENLACE_LUNA, ETIQUETAS, FASES_INFO, FICHAS_CICLO, HOROSCOPO_DETRAS, HORMONAS, ICONOS, INSIGNIAS,
+  ESCENAS, MINIATURAS, REACCIONES_EXTRA, TEMAS_HOY,
   ORDEN_TIEMPOS, TEXTOS_AVISO, TIEMPOS, avatarNimbo, consejoDe, ficha, horoscopoDe, iconoTiempo, lunaSVG, nubeSuelta, signo, solSuelto, stormyPortada,
 } from './contenido.js';
-import { NIMBO, reaccion, responder, saludo, sugerenciasDe } from './asistente.js';
+import { MODO_NORMAL, NIMBO, PERSONALIDADES, conEstilo, conPersonalidad, reaccion, responder, saludo, sugerenciasDe } from './asistente.js';
+import {
+  CATALOGO, COFRES, COFRE_GRATIS, COLECCIONABLES, GARANTIA, RAREZAS, TIPOS, abrirCofre as abreCofreTienda, aplicaComodin, cofre, cofresGratis,
+  BONO_NIVEL, CHAT, bonosNivel, chatHoy, comprar, destacadoDe, enTienda, equipar, estadoColeccion, garantiaEn, objeto, premioChat, premioCuriosidad,
+  coleccionDe, previsualiza, puedeComprarComodin, puedeSalir, tiendaVacia, vistaPuedeSalir,
+} from './tienda.js';
 import { capacidad, muestraAviso, pidePermiso, recogePendientes } from './avisos.js';
 import { faseLunar } from './cielo.js';
 import {
   PARENTESCOS, RELACIONES, aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
-  extrasDe, fusionaRespuestas, guardar, muestrasDe, rayosDeEstado, reglasDe, totalExtras,
+  extrasDe, fusionaRespuestas, guardar, muestrasDe, rachaDe, rayosDeEstado, rayosDisponibles, reglasDe, totalExtras,
 } from './datos.js';
 
 // ---------- App nativa de iPhone ----------
@@ -93,11 +99,31 @@ const stormyEspecial = () => diasRegistrados() >= NIVELES[NIVELES.length - 1].di
   if (q.has('demo')) demo = ejemplo(Number.isFinite(Number(q.get('demo'))) ? Number(q.get('demo')) : 30, real.perfil);
   // ?demo=30&cielo=5: en el modo demostración, el parte de hoy de ejemplo con ese tiempo (solo en memoria).
   if (demo && /^[1-5]$/.test(q.get('cielo') ?? '')) demo.entradas[hoyIso()] = { ...entradaVacia(), animo: Number(q.get('cielo')) };
+  // ?demo=30&escena=esqui&cara=gafas&tema=tema-oceano: en la demostración, objetos de la tienda puestos (solo en memoria).
+  if (demo) {
+    // ?pity=19: cofres seguidos sin legendario en la tienda de ejemplo (para ver la garantía). Solo en memoria.
+    const pity = Number(q.get('pity'));
+    if (Number.isInteger(pity) && pity > 0) demo.tienda.pity = { sinRaro: Math.min(4, pity), sinLegendario: Math.min(19, pity) };
+    for (const tipo of ['escena', 'cara', 'tema', 'personalidad']) {
+      const o = objeto(q.get(tipo));
+      if (o?.tipo === tipo) {
+        demo.tienda.comprados.push(o.id);
+        demo.tienda = equipar(demo.tienda, tipo, o.id);
+      }
+    }
+  }
   if (q.has('pestana')) ui.pestana = q.get('pestana');
   if (q.has('paso')) ui.paso = Number(q.get('paso')) || 0;
   if (q.has('hoja') && E().perfil.alta) {
-    const accion = { registro: 'abrirRegistro', niveles: 'abrirNiveles', nimbo: 'abrirNimbo' }[q.get('hoja')] ?? 'abrirRegistro';
-    setTimeout(() => acciones[accion]({}), 0);
+    const accion = {
+      registro: 'abrirRegistro', niveles: 'abrirNiveles', nimbo: 'abrirNimbo', tienda: 'abrirTienda', coleccion: 'abrirColeccion', probabilidades: 'verProbabilidades',
+    }[q.get('hoja')] ?? 'abrirRegistro';
+    setTimeout(() => {
+      acciones[accion]({ id: cofre(q.get('cofre'))?.id ?? 'tormenta', tipo: q.get('categoria') ?? '' });
+      if (demo && q.get('modos')) acciones.menuModos();
+      // ?demo=30&hoja=nimbo&pregunta=…: en la demostración, una pregunta ya hecha a Stormy.
+      if (demo && accion === 'abrirNimbo' && q.get('pregunta')) preguntaANimbo(q.get('pregunta').slice(0, 140));
+    }, 0);
   }
 }
 
@@ -323,6 +349,8 @@ function vistaHoy() {
   const sig = nivelSiguiente(dias);
   const s = perfil.nacimiento ? signo(perfil.nacimiento) : null;
 
+  // La escena de la tienda vive en su propia franja, entre la última tarjeta y la barra: nunca encima de texto ni botones.
+  const escenaHoy = ESCENAS[equipadoDe('escena')] ? equipadoDe('escena') : null;
   const avisoInstalar = faltaInstalar() && !instalarOcultoHoy()
     ? `<div class="aviso-instalar" role="status"><button type="button" data-accion="verInstalar">${ICONOS.subir}<span>Stormy no está instalada · <u>Cómo instalar</u></span></button>
         <button type="button" class="cerrar" data-accion="ocultarInstalar" aria-label="Ocultar hasta mañana">×</button></div>` : '';
@@ -331,6 +359,7 @@ function vistaHoy() {
     <header class="cabecera">
       <div><h1>${esc(casaDe(perfil))}</h1><p>${fechaLarga(hoy)}</p></div>
       <button type="button" class="icono-boton" data-accion="compartir" aria-label="Compartir el parte de hoy">${ICONOS.compartir}</button>
+      <button type="button" class="icono-boton" data-accion="irAjustes" aria-label="Ajustes">${ICONOS.ajustes}</button>
       <button type="button" class="burbuja-registro ${entrada ? 'hecho' : ''}" data-accion="abrirRegistro" data-guia="registrar"
         aria-label="${entrada ? `Parte de hoy: ${TIEMPOS[entrada.animo].titulo}. Toca para cambiarlo` : 'Registrar el parte de hoy'}">${
         entrada ? `${ICONOS.visto}${ficha(entrada.animo, 30)}` : `${ICONOS.mas}<span>Registrar</span>`}</button>
@@ -345,18 +374,25 @@ function vistaHoy() {
       </div>
       ${p.etiquetas.length ? `<ul class="motivos" aria-label="Por qué">${p.etiquetas.slice(0, 2).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
     </section>
-    ${tarjeta(`<div class="consejo-cab"><p class="sobre"><i class="acento">${ICONOS.bombilla}</i>Consejo del día</p>
-        <button type="button" class="pildora" data-accion="abrirHoroscopo">${s ? `<span aria-hidden="true">${s.emoji}</span>Horóscopo` : `${ICONOS.mas}Añadir horóscopo`}</button></div>
-      <p class="texto">${consejoDe(t, hoy, perfil.relacion)}</p>`, 'cristal compacta')}
+    <div class="fila-consejo">
+      ${tarjeta(`<p class="sobre"><i class="acento">${ICONOS.bombilla}</i>Consejo del día</p>
+        <p class="texto">${consejoDe(t, hoy, perfil.relacion)}</p>`, 'cristal compacta consejo')}
+      <button type="button" class="tarjeta-horoscopo" data-accion="abrirHoroscopo" aria-label="${s ? `Horóscopo de ${s.nombre}` : 'Añadir horóscopo'}">
+        <span class="signo" aria-hidden="true">${s ? s.emoji : '✨'}</span>
+        <span class="horoscopo-texto"><b>${s ? 'Horóscopo' : 'Añadir horóscopo'}</b>${s ? `<small>${s.nombre}</small>` : ''}</span>
+        <span class="flecha-horoscopo" aria-hidden="true">›</span>
+      </button>
+    </div>
     ${tarjeta(`<h3>Próximos días</h3><div class="semana">${proximos}</div>
       ${cuenta ? `<p class="nota cuenta">${ICONOS.candado}${cuenta}</p>` : ''}`, 'cristal compacta')}
     <button class="tarjeta cristal compacta boton-tarjeta progreso-hoy" data-accion="abrirNiveles" data-guia="progreso"
-      aria-label="${nivel.titulo}. Racha de ${racha(Object.keys(st.entradas), hoy)} días y ${rayosDeEstado(st)} rayos. Abre el camino de niveles">
+      aria-label="${nivel.titulo}. Racha de ${rachaDe(st, hoy)} días y ${rayosDisponibles(st)} rayos. Abre el camino de niveles">
       <div class="progreso-cab"><p class="sobre">Nivel ${nivel.id + 1} de ${NIVELES.length} · ${nivel.titulo}</p>
-        <span class="marcas"><span><i class="acento">${ICONOS.llama}</i>${racha(Object.keys(st.entradas), hoy)}</span><span><i class="mango">${ICONOS.rayo}</i>${rayosDeEstado(st)}</span></span></div>
+        <span class="marcas"><span><i class="acento">${ICONOS.llama}</i>${rachaDe(st, hoy)}</span><span><i class="mango">${ICONOS.rayo}</i>${rayosDeEstado(st)}</span></span></div>
       <div class="anillos">${anillosNiveles(dias)}</div>
       <p class="nota">${sig ? `${faltan(sig.dias - dias)} para «${premioDe(sig, perfil.sigueCiclo)}»` : 'Todos los mundos abiertos: Stormy ya conoce vuestro clima.'}</p>
     </button>
+    ${escenaHoy ? `<div class="escena-banda escena-${escenaHoy}" aria-hidden="true">${ESCENAS[escenaHoy]()}</div>` : ''}
   </main>`;
 }
 
@@ -389,7 +425,7 @@ function hojaRegistro() {
   const tres = (titulo, campo, nombres) =>
     `<div class="grupo"><h4>${titulo}</h4>${eleccion(`borrador.${campo}`, b[campo], nombres.map((n, i) => [i + 1, n]))}</div>`;
   const masDatos = !b.animo ? '' : `
-      ${b.reaccion ? `<div class="reaccion" role="status">${avatarNimbo(40, stormyEspecial())}<p>${b.reaccion}</p><span class="premio">+${b.premio}${ICONOS.rayo}</span></div>` : ''}
+      ${b.reaccion ? `<div class="reaccion ${b.rafaga ? `con-rafaga ${b.rafaga}` : ''}" role="status">${b.rafaga ? '<span class="rafaga" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>' : ''}${avatar(40)}<p>${b.reaccion}</p><span class="premio">+${b.premio}${ICONOS.rayo}</span></div>` : ''}
       <div class="extra-cab"><div><h3>¿Añades algún dato más?</h3><p>Opcional. Se guarda solo según lo tocas.</p></div>${extras ? `<span class="contador">+${extras}</span>` : ''}</div>
       ${tres('¿Qué tal la noche?', 'sueno', ['Mala', 'Regular', 'Buena'])}
       ${tres('¿Día estresante?', 'estres', ['Poco', 'Normal', 'Mucho'])}
@@ -451,7 +487,7 @@ function hojaRecuperar() {
     `<button type="button" class="${elegido === t ? 'on' : elegido ? 'off' : ''}" style="--tinte:${TIEMPOS[t].tinte}" aria-label="${TIEMPOS[t].titulo}" aria-pressed="${elegido === t}" data-accion="${accion}" data-dia="${dia}" data-t="${t}">${ficha(t, 38)}</button>`).join('')}</div>`;
   const marcados = Object.keys(h.elegidos).length;
   return `<div class="hoja-cuerpo">
-      <div class="reaccion">${avatarNimbo(40, stormyEspecial())}<p><strong>${titulo}.</strong> ${sub}</p></div>
+      <div class="reaccion">${avatar(40)}<p><strong>${titulo}.</strong> ${sub}</p></div>
       ${n >= 4 ? `<div class="fila-dia todos"><span>Toda la semana igual</span>${fichas('recuperaTodos', '', h.todos)}</div>` : ''}
       ${h.dias.map((d) => `<div class="fila-dia"><span>${d === hoy ? 'Hoy' : mayus(fecha(d, { weekday: 'short', day: 'numeric' }))}</span>${fichas('recuperaDia', d, h.elegidos[d])}</div>`).join('')}
       <p class="nota sin-margen">Los días apuntados de memoria se marcan como orientativos: cuentan para los niveles y pesan la mitad en el pronóstico.</p>
@@ -480,7 +516,7 @@ function hojaNiveles() {
   const dias = diasRegistrados();
   const extras = totalExtras(st);
   const conCiclo = st.perfil.sigueCiclo;
-  const cara = avatarNimbo(34, stormyEspecial());
+  const cara = avatar(34);
   const mundos = NIVELES.map((n, i) => {
     const sig = NIVELES[i + 1];
     const abierto = dias >= n.dias;
@@ -497,22 +533,24 @@ function hojaNiveles() {
           <div><small>${n.extra ? 'Mundo extra' : `Mundo ${i + 1}`} · ${n.dias === 0 ? 'inicio' : `día ${n.dias}`}</small><h3>${n.titulo}</h3></div>
           <b>${abierto ? ICONOS.visto : faltan(n.dias - dias)}</b>
         </div>
-        <ul class="premios">${premioDe(n, conCiclo).split(' y ').map((x) => `<li>${ICONOS.destello}${mayus(x)}</li>`).join('')}</ul>
+        <ul class="premios">${premioDe(n, conCiclo).split(' y ').map((x) => `<li>${ICONOS.destello}${mayus(x)}</li>`).join('')}${BONO_NIVEL[n.dias] ? `<li class="bono">${ICONOS.rayo}+${BONO_NIVEL[n.dias]} rayos de regalo</li>` : ''}</ul>
         ${piedras ? `<div class="piedras" aria-hidden="true">${piedras}</div>` : ''}
       </section>`;
   }).join('');
   return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Hecho</button></div>
     <div class="hoja-cuerpo">
-      <h2>El camino de Stormy</h2>
+      <div class="niveles-cab"><h2>El camino de Stormy</h2>
+        <span class="niveles-botones"><button type="button" class="icono-boton" data-accion="irAjustes" aria-label="Ajustes">${ICONOS.ajustes}</button>
+        <button type="button" class="boton-tienda" data-accion="abrirTienda" aria-label="Abrir la tienda de Stormy">${cofreSVG('arcoiris', 30)}<span>Tienda</span></button></span></div>
       <p class="fecha">Cada día registrado es un paso. Sin castigos ni prisas: si un día se te pasa, el camino te espera donde lo dejaste.</p>
       <div class="marcador">
-        <div><i class="acento">${ICONOS.llama}</i><b>${racha(Object.keys(st.entradas), hoyIso())}</b><small>de racha</small></div>
-        <div><i class="mango">${ICONOS.rayo}</i><b>${rayosDeEstado(st)}</b><small>rayos</small></div>
+        <div><i class="acento">${ICONOS.llama}</i><b>${rachaDe(st)}</b><small>de racha</small></div>
+        <div><i class="mango">${ICONOS.rayo}</i><b>${rayosDisponibles(st)}</b><small>rayos</small></div>
         <div><i class="acento">${ICONOS.calendario}</i><b>${dias}</b><small>${dias === 1 ? 'día' : 'días'}</small></div>
       </div>
       <div class="camino" role="list" aria-label="Mundos: ${dias} días registrados">${mundos}</div>
       <div class="tarjeta"><h3>Rayos</h3>
-        <p class="nota">Son solo parte del juego: ${RAYOS.parte} por cada parte, ${RAYOS.extra} por cada dato extra y ${RAYOS.semana} al completar cada bloque de 7 partes. De momento se acumulan y nada más; no cambian el pronóstico.</p></div>
+        <p class="nota">Son solo parte del juego: ${RAYOS.parte} por cada parte, ${RAYOS.extra} por cada dato extra y ${RAYOS.semana} al completar cada bloque de 7 partes. Se canjean en la tienda de Stormy por cosas de adorno; no cambian el pronóstico.</p></div>
       <div class="tarjeta"><div class="extra-cab"><h3>Datos extra</h3><span class="cifra-acento">${extras}</span></div>
         <p class="nota">La noche, el estrés, el tiempo juntos, las etiquetas y las notas. Cuantos más aportes, más factores puede explicar Stormy.</p>
         <div class="insignias">${INSIGNIAS.map(([umbral, nombre]) => `<div class="${extras >= umbral ? 'on' : ''}"><span>${extras >= umbral ? ICONOS.medalla : ICONOS.candado}</span><b>${nombre}</b><small>${umbral} datos</small></div>`).join('')}</div>
@@ -527,26 +565,439 @@ function hojaNivelNuevo() {
       <p class="rotulo">${n.extra ? '¡Mundo extra abierto!' : '¡Nivel desbloqueado!'}</p>
       <h2>${n.titulo}</h2>
       <p>Llevas ${n.dias} días registrados. Ahora tienes: ${premioDe(n, E().perfil.sigueCiclo).toLowerCase()}.</p>
+      ${ui.hoja.bono ? `<div class="bono-nivel" role="status"><span class="monedas" aria-hidden="true">${'<i></i>'.repeat(10)}</span><b>+${ui.hoja.bono} ⚡</b><small>de regalo para la tienda</small></div>` : ''}
     </div>
     <div class="hoja-pie"><button class="principal" data-accion="cerrarHoja">Genial</button></div>`;
 }
 
+// ---------- La tienda de Stormy ----------
+// Todo se paga con rayos (nunca con dinero) y es de adorno: nada de esto cambia el pronóstico.
+// En el modo demostración se gasta la tienda de ejemplo, que solo vive en memoria.
+
+const tiendaDe = () => E().tienda ?? (E().tienda = tiendaVacia());
+const equipadoDe = (tipo) => tiendaDe().equipado[tipo] ?? null;
+const avatar = (lado) => avatarNimbo(lado, stormyEspecial(), equipadoDe('cara'));
+const saldoActual = () => rayosDisponibles(E());
+const pctProb = (v) => `${Math.round(v * 100)} %`;
+
+// Cada cofre tiene su madera, sus herrajes y su motivo. Ids de degradados únicos por dibujo.
+const ESTILO_COFRE = {
+  nube: { madera: ['#C9BFF0', '#9A8FE0', '#7A6CC4'], herraje: ['#FFFFFF', '#C7CBDD', '#8D93AE'], placa: ['#FFFFFF', '#B9BED3'], brillo: '#BFD3FF' },
+  tormenta: { madera: ['#5A49B0', '#3B2E86', '#241A5C'], herraje: ['#FFE39A', '#FFC94D', '#B9852A'], placa: ['#FFE7A8', '#E0A93A'], brillo: '#FFD36B' },
+  arcoiris: { madera: ['#FFC7A8', '#F59A7A', '#D96F57'], herraje: ['#B8F2E2', '#5FD0B0', '#2E9C80'], placa: ['#FFF2C4', '#FFC94D'], brillo: '#FFFFFF' },
+};
+let cofresDibujados = 0;
+function cofreSVG(id, lado = 96) {
+  const e = ESTILO_COFRE[id];
+  const k = `c${id}${++cofresDibujados}`;
+  const g = (n, [a, b2, c], dir = 'y') => `<linearGradient id="${k}${n}" x1="0" y1="0" x2="${dir === 'x' ? 1 : 0}" y2="${dir === 'y' ? 1 : 0}"><stop offset="0" stop-color="${a}"/><stop offset=".55" stop-color="${b2}"/><stop offset="1" stop-color="${c}"/></linearGradient>`;
+  const remaches = (x) => [56, 70, 84].map((y) => `<circle cx="${x}" cy="${y}" r="2.2" fill="${e.herraje[0]}" stroke="${e.herraje[2]}" stroke-width=".8"/>`).join('');
+  const motivo = {
+    nube: '<path d="M46 34a6 6 0 0 1-.6-12 8.5 8.5 0 0 1 16.2-2.4A7 7 0 0 1 63 34z" fill="#fff" opacity=".9"/>',
+    tormenta: '<path d="M58 16l-8 11h6l-3 9 9-12h-6l4-8z" fill="#FFC94D" stroke="#7A4F12" stroke-width="1"/>',
+    arcoiris: ['#FF6B5E', '#FFC94D', '#8EE0C8', '#8FA8F0'].map((c, i) => `<path d="M${40 + i * 3} 34a${14 - i * 3} ${14 - i * 3} 0 0 1 ${28 - i * 6} 0" fill="none" stroke="${c}" stroke-width="3"/>`).join(''),
+  }[id];
+  return `<svg class="cofre-svg cofre-${id}" viewBox="0 0 108 108" width="${lado}" height="${lado}" aria-hidden="true">
+    <defs>${g('m', e.madera)}${g('h', e.herraje, 'x')}${g('p', e.placa)}
+      <radialGradient id="${k}l"><stop offset="0" stop-color="${e.brillo}" stop-opacity=".95"/><stop offset="1" stop-color="${e.brillo}" stop-opacity="0"/></radialGradient>
+      <clipPath id="${k}c"><rect x="14" y="46" width="80" height="46" rx="7"/></clipPath></defs>
+    <ellipse cx="54" cy="100" rx="38" ry="5" fill="#1E2749" opacity=".22"/>
+    <ellipse class="brillo-interior" cx="54" cy="47" rx="36" ry="12" fill="url(#${k}l)"/>
+    <g class="cuerpo">
+      <rect x="14" y="46" width="80" height="46" rx="7" fill="url(#${k}m)" stroke="#1E2749" stroke-width="2.4"/>
+      <g clip-path="url(#${k}c)" opacity=".18" stroke="#1E2749" stroke-width="1.2"><path d="M14 61h80M14 76h80"/></g>
+      <rect x="14" y="86" width="80" height="6" rx="3" fill="url(#${k}h)" stroke="#1E2749" stroke-width="1.6"/>
+      <rect x="24" y="46" width="9" height="46" fill="url(#${k}h)" stroke="#1E2749" stroke-width="1.6"/>
+      <rect x="75" y="46" width="9" height="46" fill="url(#${k}h)" stroke="#1E2749" stroke-width="1.6"/>
+      ${remaches(28.5)}${remaches(79.5)}
+      <path d="M43 52h22a4 4 0 0 1 4 4v14a10 10 0 0 1-10 10h-10a10 10 0 0 1-10-10V56a4 4 0 0 1 4-4z" fill="url(#${k}p)" stroke="#1E2749" stroke-width="2"/>
+      <circle cx="54" cy="63" r="3.2" fill="#1E2749"/><path d="M52.6 65h2.8l1 7h-4.8z" fill="#1E2749"/>
+      <g clip-path="url(#${k}c)"><rect class="destello" x="-30" y="30" width="12" height="80" fill="#fff" opacity=".45" transform="rotate(20 54 70)"/></g>
+    </g>
+    <g class="tapa">
+      <path d="M12 48V36c0-12 9-20 20-20h44c11 0 20 8 20 20v12z" fill="url(#${k}m)" stroke="#1E2749" stroke-width="2.4"/>
+      <path d="M20 30c4-7 9-9 16-9" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".45" fill="none"/>
+      <path d="M24 17.5V48h9V16.2zM75 16.2V48h9V17.5z" fill="url(#${k}h)" stroke="#1E2749" stroke-width="1.6"/>
+      <rect x="11" y="44" width="86" height="7" rx="3.5" fill="url(#${k}h)" stroke="#1E2749" stroke-width="1.6"/>
+      <circle cx="28.5" cy="26" r="2" fill="${e.herraje[0]}" stroke="${e.herraje[2]}" stroke-width=".8"/><circle cx="79.5" cy="26" r="2" fill="${e.herraje[0]}" stroke="${e.herraje[2]}" stroke-width=".8"/>
+      ${motivo}
+    </g></svg>`;
+}
+
+/** Vista previa en vivo de un objeto. */
+function previa(o, lado = 64) {
+  if (o.tipo === 'cara') return avatarNimbo(lado, false, o.id);
+  if (o.tipo === 'escena') return `<span class="mini-escena">${MINIATURAS[o.id]}</span>`;
+  if (o.tipo === 'tema') {
+    const t = TEMAS_HOY[o.id].claro;
+    return `<span class="muestras">${ORDEN_TIEMPOS.map((n) => `<i style="background:${t[n][0]}"></i>`).join('')}</span>`;
+  }
+  if (o.tipo === 'reaccion') return `<span class="mini-rafaga ${REACCIONES_EXTRA[o.id].rafaga}"><b class="emoji">${o.id === 'fiesta' ? '🎉' : '👏'}</b><i></i><i></i><i></i><i></i></span>`;
+  if (o.tipo === 'personalidad') {
+    // Miniatura de tamaño fijo: Stormy con un bocadillo de dos o tres palabras (nunca se sale).
+    const palabras = PERSONALIDADES[o.id].entrada.replace(/[,.¡!¿?]/g, '').split(' ').slice(0, 2).join(' ');
+    // En miniaturas pequeñas, solo el bocadillo con «…»: el texto no cabría.
+    return `<span class="mini-personalidad ${lado < 60 ? 'pequena' : ''}" style="--lado:${lado}px">${avatarNimbo(Math.round(lado * 0.62))}<span class="bocadillo-mini">${lado < 60 ? '…' : `${palabras}…`}</span></span>`;
+  }
+  return `<span class="mini-escudo">${ICONOS.escudo}</span>`;
+}
+
+const insignia = (rareza) => `<span class="rareza ${rareza}">${RAREZAS[rareza].nombre}</span>`;
+const CATEGORIAS = [['cara', 'Caras'], ['escena', 'Escenas'], ['tema', 'Temas'], ['reaccion', 'Reacciones'], ['personalidad', 'Personalidades'], ['comodin', 'Extras']];
+
+/** Sin rayos suficientes el botón sigue respondiendo: tiembla y dice cuánto falta (no se desactiva del todo). */
+const sinRayosBoton = (falta, precio) =>
+  `<button type="button" class="canjear sin-rayos" aria-disabled="true" data-accion="sinRayos" data-falta="${falta}" aria-label="${precio} rayos. Te faltan ${falta}">${ICONOS.candado}${ICONOS.rayo}${precio}</button>`;
+
+/** Botón de cada objeto según si es tuyo, si lo llevas puesto o si te alcanza. */
+function botonObjeto(o) {
+  const t = tiendaDe();
+  const tuyo = o.tipo !== 'comodin' && t.comprados.includes(o.id);
+  if (tuyo && t.equipado[o.tipo] === o.id) return `<button type="button" class="canjear puesto" data-accion="equiparObjeto" data-tipo="${o.tipo}" data-id="">${ICONOS.visto}Equipado</button>`;
+  if (tuyo) return `<button type="button" class="canjear tuyo" data-accion="equiparObjeto" data-tipo="${o.tipo}" data-id="${o.id}">Equipar</button>`;
+  const bloqueo = o.tipo === 'comodin' ? puedeComprarComodin(t, hoyIso()) : { ok: true };
+  if (!bloqueo.ok) return `<button type="button" class="canjear" disabled>${bloqueo.motivo}</button>`;
+  const falta = o.precio - saldoActual();
+  return falta > 0
+    ? sinRayosBoton(falta, o.precio)
+    : `<button type="button" class="canjear" data-accion="canjear" data-id="${o.id}">${ICONOS.rayo}${o.precio}</button>`;
+}
+
+function tarjetaObjeto(o, destacado = false) {
+  const t = tiendaDe();
+  const tuyo = o.tipo !== 'comodin' && t.comprados.includes(o.id);
+  const nota = o.tipo === 'comodin'
+    ? `Salva un día suelto sin parte para que no se rompa la racha. Uno al mes.${t.comodin.disponibles ? ' Tienes uno guardado.' : ''}`
+    : o.tipo === 'personalidad' ? 'Cambia el estilo de saludos y reacciones; lo que dice Stormy sigue siendo igual.' : '';
+  return `<article class="objeto marco-${o.rareza} ${tuyo ? 'es-tuyo' : ''} ${destacado ? 'destacado-tarjeta' : ''}" ${destacado ? '' : `id="objeto-${o.id}"`}>
+      ${destacado ? '<span class="cinta">Destacado de hoy</span>' : ''}
+      <div class="objeto-previa">${previa(o, destacado ? 84 : 64)}</div>
+      ${insignia(o.rareza)}
+      <h4>${o.nombre}</h4>
+      ${nota ? `<p class="mini">${nota}</p>` : ''}
+      ${botonObjeto(o)}
+      ${o.tipo !== 'comodin' && !tuyo ? `<button type="button" class="enlace-pequeno probar" data-accion="probar" data-id="${o.id}">Probar</button>` : ''}
+    </article>`;
+}
+
+function tarjetaCofre(c, gratis = null) {
+  const falta = c.precio - saldoActual();
+  const titulo = gratis === 'bienvenida' ? 'Cofre de bienvenida' : gratis === 'semanal' ? 'Cofre de la semana' : c.nombre;
+  const boton = gratis
+    ? `<button type="button" class="canjear gratis" data-accion="abrirCofre" data-id="${c.id}" data-gratis="${gratis}">Abrir gratis</button>`
+    : falta > 0
+      ? sinRayosBoton(falta, c.precio)
+      : `<button type="button" class="canjear" data-accion="abrirCofre" data-id="${c.id}">${ICONOS.rayo}${c.precio}</button>`;
+  return `<article class="cofre-tarjeta ${c.id} ${gratis ? 'es-gratis' : ''}">
+      <div class="cofre-mini">${cofreSVG(c.id, 96)}</div>
+      <div class="cofre-info"><h4>${titulo}</h4>
+        <p class="probabilidad-corta"><span class="punto-rareza legendario"></span>Legendario ${pctProb(c.prob.legendario)} · <span class="punto-rareza raro"></span>Raro ${pctProb(c.prob.raro)}</p>
+        <div class="cofre-acciones">${boton}<button type="button" class="enlace-pequeno" data-accion="verProbabilidades" data-id="${c.id}">Probabilidades</button></div>
+      </div>
+    </article>`;
+}
+
+function vistaTienda() {
+  const t = tiendaDe();
+  const partes = diasRegistrados();
+  const tengo = COLECCIONABLES.filter((o) => t.comprados.includes(o.id)).length;
+  const coleccion = ui.vistaTienda === 'coleccion';
+  let cuerpo;
+  if (coleccion) {
+    const filtro = ui.coleccionFiltro;
+    const cats = CATEGORIAS.filter(([tipo]) => tipo !== 'comodin');
+    cuerpo = `<div class="filtros-coleccion">${[['', 'Todo'], ...cats].map(([tipo, nombre]) => `<button type="button" class="${(filtro ?? '') === tipo ? 'on' : ''}" aria-pressed="${(filtro ?? '') === tipo}" data-accion="filtraColeccion" data-id="${tipo}">${nombre}</button>`).join('')}</div>
+      ${cats.filter(([tipo]) => !filtro || filtro === tipo).map(([tipo, nombre]) => `<h2 class="titulo-bloque">${nombre}</h2>
+      <div class="rejilla-coleccion">${(() => {
+        const { visibles, ocultos, legendario } = coleccionDe(tipo, t);
+        const piezas = [piezaOriginal(tipo, t), ...visibles.map((o) => piezaColeccion(o, t))];
+        return piezas.join('') + (ocultos ? fichaMisterio(`${ocultos} ${ocultos === 1 ? 'exclusivo' : 'exclusivos'} por descubrir · solo en cofres`, span(piezas.length), legendario) : '');
+      })()}</div>`).join('')}`;
+  } else {
+    const gratis = !t.bienvenida ? 'bienvenida' : cofresGratis(t, partes) > 0 ? 'semanal' : null;
+    const destacado = destacadoDe(hoyIso(), t);
+    const visibles = enTienda(t);
+    const categorias = CATEGORIAS.map(([tipo, nombre]) => [nombre, visibles.filter((o) => o.tipo === tipo)]).filter(([, l]) => l.length);
+    const soloComodin = visibles.every((o) => o.tipo === 'comodin');
+    cuerpo = `${destacado ? `<h2 class="titulo-bloque">Destacado</h2>${tarjetaObjeto(destacado, true)}` : ''}
+      <h2 class="titulo-bloque">Cofres</h2>
+      ${(() => { const g = garantiaEn(t); const n = (x) => (x === 1 ? 'el próximo cofre' : `${x} cofres`); return `<p class="garantia-comun">${ICONOS.escudo}<span>Raro garantizado en ${n(g.raro)} · legendario en ${n(g.legendario)}. Cuentan todos los cofres.</span></p>`; })()}
+      ${gratis ? tarjetaCofre(cofre(COFRE_GRATIS), gratis) : ''}${COFRES.map((c) => tarjetaCofre(c)).join('')}
+      ${soloComodin ? `<div class="tarjeta todo-tienda"><h3>Ya lo tienes todo de la tienda</h3><p class="nota">Lo que te falta solo sale en los cofres. Míralo en «Colección».</p></div>` : ''}
+      ${categorias.map(([nombre, lista]) => `<h2 class="titulo-bloque">${nombre}</h2>
+        <div class="rejilla-objetos">${lista.map((o) => tarjetaObjeto(o)).join('')}</div>`).join('')}
+      <p class="mini centro">Todo se paga con rayos, nunca con dinero, y es de adorno: nada cambia el pronóstico.</p>`;
+  }
+  return `<main class="pagina tienda-pagina">
+    <header class="tienda-cab">
+      <h1>Tienda</h1>
+      <div class="saldo-pill" aria-live="polite" aria-label="Rayos para gastar"><i class="mango">${ICONOS.rayo}</i><b class="contador-rayos" data-valor="${saldoActual()}">${ui.rayosMostrados ?? saldoActual()}</b></div>
+    </header>
+    <div class="progreso-coleccion"><span>Colección ${tengo}/${COLECCIONABLES.length}</span><span class="medidor"><i style="width:${(tengo / COLECCIONABLES.length) * 100}%"></i></span></div>
+    <div class="conmutador" role="tablist">
+      <button type="button" role="tab" aria-selected="${!coleccion}" class="${coleccion ? '' : 'on'}" data-accion="vistaTienda" data-id="tienda">Tienda</button>
+      <button type="button" role="tab" aria-selected="${coleccion}" class="${coleccion ? 'on' : ''}" data-accion="vistaTienda" data-id="coleccion">Colección</button>
+    </div>
+    ${demo ? '<p class="aviso-demo">Datos de ejemplo: estos rayos son de mentira y nada se guarda.</p>' : ''}
+    ${cuerpo}
+  </main>`;
+}
+
+const NOMBRE_ORIGINAL = { cara: 'Original', escena: 'Ninguna', tema: 'Original', reaccion: 'Original', personalidad: 'Normal' };
+
+/** Pieza «Original»: quita lo equipado de esa categoría. */
+function piezaOriginal(tipo, t) {
+  const puesto = !t.equipado[tipo];
+  const muestra = tipo === 'cara' ? avatarNimbo(52) : `<span class="original-icono">${ICONOS.casa}</span>`;
+  return `<button type="button" class="pieza original ${puesto ? 'puesta' : ''}" data-accion="equiparObjeto" data-tipo="${tipo}" data-id="" aria-pressed="${puesto}">
+    <div class="objeto-previa">${muestra}</div><h4>${NOMBRE_ORIGINAL[tipo]}</h4>
+    <span class="canjear ${puesto ? 'puesto' : 'tuyo'}">${puesto ? `${ICONOS.visto}Equipado` : 'Usar'}</span></button>`;
+}
+
+/** Pieza de la colección según su estado: tuya, en la tienda (atenuada con candado) o misterio (solo en cofres). */
+function piezaColeccion(o, t) {
+  const estado = estadoColeccion(o, t);
+  if (estado === 'puesto' || estado === 'mio') {
+    // Tocar algo tuyo abre la vista previa, con «Equipar».
+    return `<button type="button" class="pieza marco-${o.rareza} mia ${estado === 'puesto' ? 'puesta' : ''}" data-accion="probar" data-id="${o.id}" aria-label="${o.nombre}${estado === 'puesto' ? ', equipado' : ''}. Ver cómo queda">
+      <div class="objeto-previa">${previa(o, 52)}</div><h4>${o.nombre}</h4>
+      <span class="canjear ${estado === 'puesto' ? 'puesto' : 'tuyo'}">${estado === 'puesto' ? `${ICONOS.visto}Equipado` : 'Probar'}</span></button>`;
+  }
+  if (estado === 'tienda') {
+    return `<button type="button" class="pieza marco-${o.rareza} en-tienda" data-accion="irAObjeto" data-id="${o.id}" aria-label="${o.nombre}: en la tienda por ${o.precio} rayos">
+      <span class="candado-mini">${ICONOS.candado}</span><div class="objeto-previa">${previa(o, 52)}</div><h4>${o.nombre}</h4>
+      <span class="precio-silueta en-tienda-precio"><small>En la tienda</small><b>${ICONOS.rayo}${o.precio}</b></span></button>`;
+  }
+  return `<article class="pieza marco-${o.rareza} misterio ${o.rareza === 'legendario' ? 'misterio-legendario' : ''}" aria-label="Objeto ${RAREZAS[o.rareza].nombre.toLowerCase()} sin descubrir, solo en cofres">
+    <div class="objeto-previa"><span class="interrogante" aria-hidden="true">?</span></div><h4>???</h4><span class="solo-cofres">Solo en cofres</span></article>`;
+}
+
+/** Tabla completa de un cofre: probabilidades por rareza, qué puede salir y las garantías. */
+function hojaProbabilidades() {
+  const c = cofre(ui.hoja.id);
+  const t = tiendaDe();
+  const g = garantiaEn(t);
+  const filas = Object.entries(c.prob).map(([r, v]) => {
+    const objetos = COLECCIONABLES.filter((o) => o.rareza === r);
+    return `<tr><th scope="row"><span class="punto-rareza ${r}"></span>${RAREZAS[r].nombre}</th><td>${pctProb(v)}</td><td>${objetos.length}</td><td>${pctProb(v / objetos.length)}</td></tr>`;
+  }).join('');
+  return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Hecho</button></div>
+    <div class="hoja-cuerpo">
+      <div class="prob-cab">${cofreSVG(c.id, 84)}<div><h2>${c.nombre}</h2><p class="fecha">${c.precio} rayos · probabilidades publicadas</p></div></div>
+      <table class="tabla-prob"><thead><tr><th>Rareza</th><th>Probabilidad</th><th>Objetos</th><th>Cada uno</th></tr></thead><tbody>${filas}</tbody></table>
+      <div class="tarjeta"><h3>Garantías</h3>
+        <p class="nota">Si abres ${GARANTIA.raro - 1} cofres seguidos sin nada raro, el ${GARANTIA.raro}.º trae al menos un raro. Si abres ${GARANTIA.legendario - 1} sin legendario, el ${GARANTIA.legendario}.º trae un legendario. Cuentan todos los cofres, también los gratis.</p>
+        <p class="nota"><strong>Tú ahora:</strong> raro garantizado en ${g.raro === 1 ? 'el próximo' : `${g.raro} cofres`}; legendario en ${g.legendario === 1 ? 'el próximo' : `${g.legendario} cofres`}.</p></div>
+      <div class="tarjeta"><h3>Repetidos</h3>
+        <p class="nota">Dentro de la rareza que sale, primero te toca algo que no tengas. Solo cuando tienes todos los de esa rareza se repite, y se cambia por rayos: común ${RAREZAS.comun.duplicado}, raro ${RAREZAS.raro.duplicado}, legendario ${RAREZAS.legendario.duplicado}.</p></div>
+      ${tablaItems(c)}
+    </div>`;
+}
+/** «Puede salir»: los legendarios destacados y a la vista, los raros por nombre y los comunes resumidos. */
+/** Ficha única de misterio; ocupa las columnas que falten para cerrar la última fila de una rejilla de 3. */
+const span = (antes) => ({ 0: 3, 1: 2, 2: 1 })[antes % 3];
+const fichaMisterio = (texto, columnas, legendaria = false) =>
+  `<div class="misterio-unico ${legendaria ? 'dorado marco-legendario' : ''}" style="grid-column: span ${columnas}">${legendaria ? '' : '<span class="esquina-exclusivo">Exclusivo</span>'}<span class="interrogante grande">?</span><span>${texto}</span></div>`;
+
+const tablaItems = (c) => `<h3 class="subtitulo">Puede salir</h3>${vistaPuedeSalir(c.id, tiendaDe(), hoyIso()).map(({ rareza, prob, visibles, ocultos, resumen }) => {
+  if (rareza === 'legendario') {
+    return `<div class="fila-legendaria marco-legendario"><p class="sobre">${RAREZAS.legendario.nombre} · ${pctProb(prob)} · exclusivos de cofre</p>
+      <div class="legendarios">${visibles.map((o) => `<div class="legendario-item">${previa(o, 48)}<span>${o.nombre}</span></div>`).join('')}
+      ${ocultos ? `<div class="legendario-item misterio-leg" style="grid-column: span ${visibles.length % 2 ? 1 : 2}"><span class="interrogante">?</span><span>+${ocultos} ${ocultos === 1 ? 'legendario' : 'legendarios'} por descubrir</span></div>` : ''}</div></div>`;
+  }
+  if (rareza === 'raro') {
+    return `<div class="fila-rara"><p class="sobre"><span class="punto-rareza raro"></span> ${RAREZAS.raro.nombre} · ${pctProb(prob)}</p>
+      <div class="fichas-raras">${visibles.map((o) => `<div class="ficha-rara">${o.via === 'cofre' ? '<span class="esquina-exclusivo">Exclusivo</span>' : ''}
+          <div class="ficha-rara-previa">${previa(o, 40)}</div><span class="ficha-rara-nombre">${o.nombre}</span></div>`).join('')}
+        ${ocultos ? fichaMisterio(`${ocultos} ${ocultos === 1 ? 'exclusivo' : 'exclusivos'}`, span(visibles.length)) : ''}</div></div>`;
+  }
+  return `<p class="nota sin-margen"><span class="punto-rareza comun"></span> y ${resumen} comunes (${pctProb(prob)}), todos también en la tienda.</p>`;
+}).join('')}`;
+
+
+/** El contador de rayos sube o baja con una animación corta (sin animación con «reducir movimiento»). */
+function animaContador() {
+  const b = $('.contador-rayos');
+  if (!b) return;
+  const fin = Number(b.dataset.valor);
+  const ini = ui.rayosMostrados ?? fin;
+  ui.rayosMostrados = fin;
+  if (ini === fin || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    b.textContent = fin;
+    return;
+  }
+  b.classList.add('cambia');
+  const t0 = performance.now();
+  const paso = (t) => {
+    const k = Math.min(1, (t - t0) / 700);
+    b.textContent = Math.round(ini + (fin - ini) * (1 - (1 - k) ** 3));
+    if (k < 1) requestAnimationFrame(paso);
+    else b.classList.remove('cambia');
+  };
+  requestAnimationFrame(paso);
+}
+
+/** Apertura de un cofre: tiembla, se abre con luz y partículas del color de la rareza y entra la carta del premio. */
+function hojaCofre() {
+  const h = ui.hoja;
+  const o = h.premio;
+  const particulas = Array.from({ length: 14 }, (_, i) => `<i style="--a:${i * (360 / 14)}deg;--d:${70 + (i % 3) * 22}px"></i>`).join('');
+  const equipable = !h.duplicado && o.tipo !== 'comodin';
+  return `<div class="hoja-cuerpo cofre-escena rareza-${h.rareza} ${h.final ? 'final' : ''}" data-accion="saltarCofre" aria-live="polite">
+      <div class="cofre-grande">
+        <span class="haz" aria-hidden="true"></span>
+        <span class="particulas" aria-hidden="true">${particulas}</span>
+        ${cofreSVG(h.cofre, 170)}
+      </div>
+      <div class="premio-carta marco-${h.rareza}" role="status">
+        <div class="carta-previa">${previa(o, 84)}</div>
+        ${insignia(h.rareza)}
+        <h3>${o.nombre}</h3>
+        <p>${h.duplicado ? `+${h.rayos} rayos, ya lo tenías` : TIPOS[o.tipo]}</p>
+      </div>
+      <div class="cofre-botones">
+        ${equipable ? `<button type="button" class="principal" data-accion="equiparPremio">Equipar ahora</button><button type="button" class="secundario" data-accion="probar" data-id="${o.id}">Probar antes</button>` : ''}
+        <button type="button" class="${equipable ? 'secundario' : 'principal'}" data-accion="volverTienda">${equipable ? 'Guardar' : 'Seguir'}</button>
+      </div>
+      <p class="mini saltar">Toca para verlo ya</p>
+    </div>`;
+}
+
+/** Aplica un regalo de rayos (o nada si ya se había dado) y lo celebra con un «+N ⚡» que sube. */
+function regala(r, texto = null) {
+  if (!r?.cantidad) return 0;
+  E().tienda = r.tienda;
+  salva();
+  flotaRayos(r.cantidad, texto);
+  return r.cantidad;
+}
+
+function flotaRayos(n, texto) {
+  const pill = $('.saldo-pill');
+  const el = document.createElement('div');
+  el.className = 'flota-rayos';
+  el.setAttribute('role', 'status');
+  el.textContent = texto ?? `+${n} ⚡`;
+  if (pill) {
+    const r = pill.getBoundingClientRect();
+    el.style.top = `${r.bottom + 6}px`;
+    el.style.right = `${innerWidth - r.right}px`;
+  }
+  document.body.append(el);
+  setTimeout(() => el.remove(), 1800);
+  const b = $('.contador-rayos');
+  if (b) { b.dataset.valor = saldoActual(); animaContador(); }
+}
+
+/** Bonos de nivel que falten (por ejemplo, al actualizar la app con días ya apuntados). Solo datos reales. */
+function bonosPendientes() {
+  if (demo || !real.perfil.alta) return;
+  regala(bonosNivel(real.tienda, Object.keys(real.entradas).length, hoyIso()));
+}
+
+// ---------- Vista previa («Probar»): nada cambia hasta pulsar «Equipar» ----------
+
+function muestraHoy(t, o) {
+  const hoy = hoyIso();
+  const tiempo = E().entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo;
+  const campo = TIEMPOS[tiempo];
+  const oscuro = matchMedia('(prefers-color-scheme: dark)').matches;
+  const tema = TEMAS_HOY[t.equipado.tema];
+  const c = tema ? tema[oscuro ? 'oscuro' : 'claro'][tiempo] : oscuro ? campo.cieloOscuro : campo.cielo;
+  const sobre = oscuro || tiempo === 1 ? '#F4F2FB' : '#1E2749';
+  const escena = t.equipado.escena;
+  return `<div class="mock-hoy" style="background:linear-gradient(${c[0]}, ${c[1]} 55%, ${c[2]});color:${sobre}">
+    <div class="mock-cab"><b>${esc(casaDe(E().perfil))}</b><span>${fechaLarga(hoy)}</span></div>
+    <div class="mock-heroe"><span class="disco">${iconoTiempo(tiempo, 40)}</span><b>${campo.titulo}</b></div>
+    <div class="mock-tarjeta"></div><div class="mock-tarjeta corta"></div>
+    ${escena && ESCENAS[escena] ? `<div class="escena-banda mock-banda">${ESCENAS[escena]()}</div>` : '<div class="mock-banda vacia"></div>'}
+  </div>`;
+}
+
+function hojaProbar() {
+  const o = objeto(ui.hoja.id);
+  const t = previsualiza(tiendaDe(), o);
+  const tuyo = tiendaDe().comprados.includes(o.id);
+  const puesto = tiendaDe().equipado[o.tipo] === o.id;
+  let vista;
+  if (o.tipo === 'cara') {
+    vista = `<div class="probar-cara">${avatarNimbo(132, false, o.id)}<div class="probar-barra">${avatarNimbo(54, false, o.id)}<span>Así se ve en la barra</span></div></div>`;
+  } else if (o.tipo === 'escena' || o.tipo === 'tema') {
+    vista = muestraHoy(t, o);
+  } else if (o.tipo === 'reaccion') {
+    const extra = REACCIONES_EXTRA[o.id];
+    vista = `<div class="reaccion con-rafaga ${extra.rafaga}"><span class="rafaga" aria-hidden="true">${'<i></i>'.repeat(8)}</span>${avatarNimbo(40, false, t.equipado.cara)}<p>${extra.lineas[0]}</p><span class="premio">+10${ICONOS.rayo}</span></div>`;
+  } else {
+    vista = `<div class="burbuja nimbo probar-chat">${avatarNimbo(30, false, t.equipado.cara)}<p>${esc(conPersonalidad(saludo(contextoNimbo()), o.id))}</p></div>`;
+  }
+  const falta = o.precio - saldoActual();
+  const principal = tuyo
+    ? (puesto ? '<button type="button" class="principal" data-accion="cerrarHoja">Ya lo llevas puesto</button>' : `<button type="button" class="principal" data-accion="equiparProbado">Equipar</button>`)
+    : o.via !== 'tienda' ? '<button type="button" class="principal" data-accion="cerrarHoja">Solo sale en cofres</button>'
+      : falta > 0 ? `<button type="button" class="principal sin-rayos" aria-disabled="true" data-accion="sinRayos" data-falta="${falta}">Te faltan ${falta} ⚡</button>`
+        : `<button type="button" class="principal" data-accion="comprarProbado">${ICONOS.rayo}Comprar y equipar · ${o.precio}</button>`;
+  return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
+    <div class="hoja-cuerpo probar">
+      <p class="sobre">Vista previa · ${TIPOS[o.tipo]}</p>
+      <h2>${o.nombre}</h2>
+      ${insignia(o.rareza)}
+      <div class="probar-vista">${vista}</div>
+      <p class="nota sin-margen">Es solo una prueba: no cambia nada hasta que pulses «${tuyo ? 'Equipar' : 'Comprar y equipar'}».</p>
+    </div>
+    <div class="hoja-pie">${principal}<button type="button" class="secundario oscuro" data-accion="cerrarHoja">Ahora no</button></div>`;
+}
+
+/** Al abrir la app: si la racha se ha roto por un solo día y hay un comodín guardado, lo gasta en ese día. */
+function usaComodinSiToca() {
+  if (demo || !real.perfil.alta) return;
+  const r = aplicaComodin(real.tienda, Object.keys(real.entradas), hoyIso());
+  if (!r.dia) return;
+  real.tienda = r.tienda;
+  salva();
+  avisa(`Tu comodín ha salvado la racha del ${fecha(r.dia, { weekday: 'long', day: 'numeric' })}`);
+}
+
 // ---------- Stormy, el ayudante ----------
 
-const contextoNimbo = () => ({ motor: motor(), entradas: E().entradas, perfil: E().perfil, hoy: hoyIso(), rayos: rayosDeEstado(E()) });
+const contextoNimbo = () => ({ motor: motor(), entradas: E().entradas, perfil: E().perfil, hoy: hoyIso(), rayos: saldoActual(), racha: rachaDe(E()), tienda: tiendaDe(), ganados: rayosDeEstado(E()) });
 
 function hojaNimbo() {
   const especial = stormyEspecial();
   const mensajes = ui.chat
-    .map((m) => `<div class="burbuja ${m.de}">${m.de === 'nimbo' ? avatarNimbo(30, especial) : ''}<p>${esc(m.texto)}</p></div>`)
+    .map((m) => m.de === 'sistema' ? `<p class="linea-sistema">${esc(m.texto)}</p>` : `<div class="burbuja ${m.de} ${m.regalo ? 'regalo' : ''}">${m.de === 'nimbo' ? avatar(30) : ''}<p>${esc(m.texto)}</p></div>`)
     .join('');
-  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatarNimbo(30, especial)}<p class="puntos-pensando" aria-label="Stormy está escribiendo"><i></i><i></i><i></i></p></div>` : '';
-  return `<div class="hoja-cab nimbo-cab">${avatarNimbo(44, especial)}<div><h3>${NIMBO.nombre}</h3><p>${NIMBO.cargo}</p></div><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
+  const pensando = ui.pensando ? `<div class="burbuja nimbo">${avatar(30)}<p class="puntos-pensando" aria-label="Stormy está escribiendo"><i></i><i></i><i></i></p></div>` : '';
+  return `<div class="hoja-cab nimbo-cab">${avatar(44)}<div><h3>${NIMBO.nombre}</h3><p>${NIMBO.cargo}</p></div><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
     <div class="hoja-cuerpo chat" role="log" aria-live="polite">${mensajes}${pensando}</div>
     <div class="hoja-pie nimbo-pie">
       <div class="sugerencias">${sugerenciasDe(E().perfil).map((s) => `<button type="button" class="opcion" data-accion="preguntar" data-q="${esc(s)}">${s}</button>`).join('')}</div>
-      <form id="form-nimbo" autocomplete="off"><input type="text" id="pregunta" placeholder="Pregúntale a Stormy" enterkeyhint="send" maxlength="140" aria-label="Tu pregunta para Stormy"><button type="submit" class="enviar" aria-label="Enviar">${ICONOS.subir}</button></form>
+      ${ui.menuModos ? menuModos() : ''}
+      <form id="form-nimbo" autocomplete="off"><input type="text" id="pregunta" placeholder="Pregúntale a Stormy" enterkeyhint="send" maxlength="140" aria-label="Tu pregunta para Stormy">
+        <button type="button" class="selector-modo" data-accion="menuModos" aria-haspopup="menu" aria-expanded="${!!ui.menuModos}" aria-label="Modo de Stormy: ${nombreModo(equipadoDe('personalidad'))}. Cambiar"><span>${nombreModo(equipadoDe('personalidad'))}</span>${ICONOS.subir}</button>
+        <button type="submit" class="enviar" aria-label="Enviar">${ICONOS.subir}</button></form>
     </div>`;
+}
+
+const nombreModo = (id) => (PERSONALIDADES[id]?.nombre ?? MODO_NORMAL.nombre);
+
+/** Menú de modos que se abre hacia arriba, encima del campo de texto. */
+function menuModos() {
+  const t = tiendaDe();
+  const actual = t.equipado.personalidad;
+  const fila = (id, info, estado) => {
+    const o = id && objeto(id);
+    const muestra = estado === 'cofre' ? '…' : `«${info.entrada.length < 40 ? info.entrada : `${info.entrada.split(/[.!,]/)[0]}…`}»`;
+    const derecha = estado === 'mio' ? (actual === id ? ICONOS.visto : '')
+      : estado === 'tienda' ? `<small class="donde">En la tienda · ${o.precio} ⚡</small>` : '<small class="donde">Solo en cofres</small>';
+    const accion = estado === 'mio' ? `data-accion="eligeModo" data-id="${id ?? ''}"` : estado === 'tienda' ? `data-accion="probar" data-id="${id}"` : 'aria-disabled="true"';
+    return `<button type="button" role="menuitemradio" aria-checked="${actual === id}" class="modo ${estado !== 'mio' ? 'bloqueado' : ''} ${actual === id ? 'on' : ''}" ${accion}>
+      <span class="modo-texto"><b>${estado !== 'mio' ? ICONOS.candado : ''}${info.nombre}</b><small>${info.descripcion}</small><i>${muestra}</i></span>${derecha}</button>`;
+  };
+  const modos = CATALOGO.filter((o) => o.tipo === 'personalidad');
+  return `<div class="menu-modos" role="menu" aria-label="Modo de Stormy">
+    ${fila(null, MODO_NORMAL, 'mio')}
+    ${modos.map((o) => fila(o.id, PERSONALIDADES[o.id], t.comprados.includes(o.id) ? 'mio' : o.via)).join('')}
+  </div>`;
 }
 
 function preguntaANimbo(texto) {
@@ -559,7 +1010,14 @@ function preguntaANimbo(texto) {
   if (teniaFoco) $('#pregunta')?.focus();
   setTimeout(() => {
     const turno = ui.chat.filter((m) => m.de === 'yo').length;
-    ui.chat.push({ de: 'nimbo', texto: responder(pregunta, contextoNimbo(), turno).texto });
+    ui.chat.push({ de: 'nimbo', texto: conEstilo(responder(pregunta, contextoNimbo(), turno).texto, equipadoDe('personalidad')) });
+    // Preguntar da rayos: +5 la primera del día y, a veces, una sorpresa (tope diario).
+    const premio = premioChat(tiendaDe(), hoyIso());
+    if (premio.cantidad) {
+      E().tienda = premio.tienda;
+      salva();
+      ui.chat.push({ de: 'nimbo', texto: premio.sorpresa ? `Stormy te regala ${premio.cantidad} ⚡` : `+${premio.cantidad} ⚡ por la primera pregunta de hoy` , regalo: true });
+    }
     ui.pensando = false;
     if (ui.hoja?.tipo !== 'nimbo') return;
     const foco = document.activeElement?.id === 'pregunta';
@@ -1038,6 +1496,16 @@ function vistaAjustes() {
     </div>
     <p class="pie-seccion">${TEXTOS_AVISO.web.ajustes}</p>`}
     ${instalar}
+    <h2 class="seccion">Personalizar</h2>
+    <div class="tarjeta lista">
+      ${CATEGORIAS.filter(([tipo]) => tipo !== 'comodin').map(([tipo, nombre]) => {
+        const id = equipadoDe(tipo);
+        const o = id && objeto(id);
+        return `<button type="button" class="enlace neutro fila-personalizar" data-accion="abrirColeccion" data-tipo="${tipo}"><span class="fila-mini">${o ? previa(o, 32) : tipo === 'cara' ? avatarNimbo(32) : ''}</span><span class="fila-texto">${nombre}<small>${o ? o.nombre : NOMBRE_ORIGINAL[tipo]}</small></span><span>${ICONOS.derecha}</span></button>`;
+      }).join('')}
+      <button type="button" class="enlace" data-accion="abrirTienda">La tienda de Stormy · ${saldoActual()} rayos</button>
+    </div>
+    <p class="pie-seccion">Todo es de adorno y se paga con rayos, nunca con dinero. Nada de esto cambia el pronóstico.</p>
     <h2 class="seccion">Modo demostración</h2>
     <div class="tarjeta lista">
       <button type="button" class="enlace" data-accion="${demo ? 'salirDemo' : 'entrarDemo'}">${demo ? 'Salir del modo demostración' : 'Ver Stormy con datos de ejemplo'}</button>
@@ -1132,12 +1600,14 @@ function terminaRecorrido() {
     salva();
   }
   pintaGuia();
+  // Regalo de bienvenida al acabar el recorrido: una sola vez por perfil y nunca en la demostración.
+  if (!demo && real.perfil.alta && !real.tienda.bienvenida) setTimeout(() => acciones.abrirCofre({ id: COFRE_GRATIS, gratis: 'bienvenida' }), 350);
 }
 
 // ---------- Pintado ----------
 
-const VISTAS = { hoy: vistaHoy, calendario: vistaCalendario, descubrimientos: vistaDescubrimientos, ajustes: vistaAjustes };
-const PESTANAS = [['hoy', 'Hoy', 'hoy'], ['calendario', 'Calendario', 'calendario'], ['descubrimientos', 'Descubre', 'grafico'], ['ajustes', 'Ajustes', 'ajustes']];
+const VISTAS = { hoy: vistaHoy, calendario: vistaCalendario, descubrimientos: vistaDescubrimientos, tienda: vistaTienda, ajustes: vistaAjustes };
+const PESTANAS = [['hoy', 'Hoy', 'hoy'], ['calendario', 'Calendario', 'calendario'], ['descubrimientos', 'Descubre', 'grafico'], ['tienda', 'Tienda', 'tienda']];
 
 function pinta({ arriba = false } = {}) {
   const vista = $('#vista');
@@ -1157,14 +1627,16 @@ function pinta({ arriba = false } = {}) {
     campo = TIEMPOS[st.entradas[hoy]?.animo ?? motor().pronostico(hoy).tiempo];
   }
   pintaFondo(alta && ui.pestana === 'hoy' ? campo?.id ?? null : null);
+  // Un tema de la tienda cambia los colores de los campos de «Hoy» (nunca el contraste).
+  const tema = alta && ui.pestana === 'hoy' ? TEMAS_HOY[equipadoDe('tema')] : null;
   document.body.classList.toggle('con-cielo', !!campo);
   // En modo oscuro cada tiempo usa una versión honda de su color, con texto claro.
   const oscuro = matchMedia('(prefers-color-scheme: dark)').matches;
-  const sobre = campo ? (oscuro ? '#F4F2FB' : campo.sobre) : null;
+  const sobre = campo ? (oscuro ? '#F4F2FB' : tema ? (campo.id === 1 ? '#FFFFFF' : '#1E2749') : campo.sobre) : null;
   document.body.classList.toggle('cielo-oscuro', !!sobre && sobre !== '#1E2749');
   document.body.classList.toggle('en-demo', !!demo);
   if (campo) {
-    const c = oscuro ? campo.cieloOscuro : campo.cielo;
+    const c = tema ? tema[oscuro ? 'oscuro' : 'claro'][campo.id] : oscuro ? campo.cieloOscuro : campo.cielo;
     document.body.style.setProperty('--cielo', `linear-gradient(${c[0]}, ${c[1]} 55%, ${c[2]})`);
     document.body.style.setProperty('--sobre', sobre);
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', c[0]);
@@ -1175,10 +1647,12 @@ function pinta({ arriba = false } = {}) {
   $('#franja').hidden = !demo;
   // Barra simétrica de cinco huecos iguales: dos pestañas, Stormy en el centro y otras dos pestañas.
   const pestana = ([id, nombre, icono]) => `<button type="button" class="${ui.pestana === id ? 'on' : ''}" ${ui.pestana === id ? 'aria-current="page"' : ''} data-accion="pestana" data-id="${id}">${ICONOS[icono]}<span>${nombre}</span></button>`;
-  const centro = `<button type="button" class="centro" data-accion="abrirNimbo" data-guia="nimbo" aria-label="Hablar con Stormy, tu predictor de tormentas">${avatarNimbo(54, stormyEspecial())}<span>Stormy</span></button>`;
+  const centro = `<button type="button" class="centro" data-accion="abrirNimbo" data-guia="nimbo" aria-label="Hablar con Stormy, tu predictor de tormentas">${avatar(54)}<span>Stormy</span></button>`;
   $('#barra').innerHTML = alta ? [...PESTANAS.slice(0, 2).map(pestana), centro, ...PESTANAS.slice(2).map(pestana)].join('') : '';
   $('#barra').hidden = !alta;
   scrollTo(0, y);
+  if (alta && ui.pestana === 'tienda') animaContador();
+  else ui.rayosMostrados = null;
   pintaGuia();
 }
 
@@ -1191,22 +1665,25 @@ const FONDOS = {
   1: () => '<span class="destello-fondo"></span>' + Array.from({ length: 10 }, (_, i) => `<i class="gota" style="left:${(i * 10.7 + 5) % 100}%;animation-delay:${((i * 0.29) % 1.2).toFixed(2)}s"></i>`).join(''),
 };
 let fondoPintado;
-function pintaFondo(tiempo) {
-  if (fondoPintado === tiempo) return;
-  fondoPintado = tiempo;
+function pintaFondo(tiempo, escena = null) {
+  const clave = `${tiempo}|${escena}`;
+  if (fondoPintado === clave) return;
+  fondoPintado = clave;
   const capa = $('#fondo');
-  capa.className = tiempo ? `fondo-${tiempo}` : '';
+  capa.className = tiempo ? `fondo-${tiempo}${escena ? ` escena-${escena}` : ''}` : '';
+  // El detalle del tiempo va siempre; la escena de la tienda, encima y detrás del contenido.
   capa.innerHTML = tiempo ? FONDOS[tiempo]() : '';
 }
 
 const HOJAS = {
   registro: hojaRegistro, niveles: hojaNiveles, nivel: hojaNivelNuevo, confirmar: hojaConfirmar, texto: hojaTexto, nimbo: hojaNimbo,
   recuperar: hojaRecuperar, tema: hojaTema, codigo: hojaCodigo, aviso: hojaAviso, instalar: hojaInstalar,
+  cofre: hojaCofre, probabilidades: hojaProbabilidades, probar: hojaProbar,
 };
 const TITULOS_HOJA = {
   registro: 'Registrar el parte', niveles: 'Niveles', nivel: 'Nivel desbloqueado', confirmar: 'Confirmación', texto: 'Información',
   nimbo: 'Hablar con Stormy', recuperar: 'Días sin apuntar', tema: 'Descubrimiento', codigo: 'Código de traspaso', aviso: 'Recordatorio',
-  instalar: 'Cómo instalar Stormy',
+  instalar: 'Cómo instalar Stormy', cofre: 'Abriendo un cofre', probabilidades: 'Probabilidades del cofre', probar: 'Vista previa',
 };
 
 function pintaHoja(nueva = false) {
@@ -1218,15 +1695,17 @@ function pintaHoja(nueva = false) {
   }
   const previo = cont.querySelector('.hoja-cuerpo')?.scrollTop ?? 0;
   const baja = ['nivel', 'confirmar', 'recuperar', 'aviso'].includes(ui.hoja.tipo);
+  const deCofre = ui.hoja.tipo === 'cofre';
   // El chat de Stormy es una ventana pequeña y flotante, no una hoja a pantalla completa.
   const chat = ui.hoja.tipo === 'nimbo';
   cont.innerHTML = `<div class="velo ${chat ? 'suave' : ''} ${nueva ? 'entra' : ''}" data-accion="cerrarHoja"></div>
-    <section class="hoja ${baja ? 'baja' : ''} ${chat ? 'flotante' : ''} ${nueva ? 'entra' : ''}" role="dialog" aria-modal="true" aria-label="${TITULOS_HOJA[ui.hoja.tipo]}" tabindex="-1">${HOJAS[ui.hoja.tipo]()}</section>`;
+    <section class="hoja ${baja ? 'baja' : ''} ${chat ? 'flotante' : ''} ${deCofre ? 'hoja-cofre' : ''} ${nueva ? 'entra' : ''}" role="dialog" aria-modal="true" aria-label="${TITULOS_HOJA[ui.hoja.tipo]}" tabindex="-1">${HOJAS[ui.hoja.tipo]()}</section>`;
   document.body.classList.add('con-hoja');
   const cuerpo = cont.querySelector('.hoja-cuerpo');
   if (cuerpo && !nueva) cuerpo.scrollTop = previo;
   if (cuerpo && ui.hoja.tipo === 'nimbo') cuerpo.scrollTop = cuerpo.scrollHeight;
   if (nueva) cont.querySelector('.hoja').focus?.();
+
 }
 
 function abreHoja(hoja) {
@@ -1402,10 +1881,21 @@ const acciones = {
     if (nuevo) {
       const total = diasRegistrados();
       const semana = total % 7 === 0;
-      b.reaccion = `${reaccion(b.animo, total)}${semana ? ' Y con este cierras un bloque de 7 partes: premio semanal.' : ''}`;
+      // Con unas reacciones de la tienda equipadas, Stormy alterna sus frases nuevas y lanza una pequeña ráfaga.
+      const extra = REACCIONES_EXTRA[equipadoDe('reaccion')];
+      const frase = extra && total % 2 === 0 ? extra.lineas[(total / 2) % extra.lineas.length] : reaccion(b.animo, total);
+      b.reaccion = conPersonalidad(`${frase}${semana ? ' Y con este cierras un bloque de 7 partes: hay cofre semanal en la tienda.' : ''}`, equipadoDe('personalidad'));
+      b.rafaga = extra?.rafaga ?? null;
       b.premio = RAYOS.parte + (semana ? RAYOS.semana : 0);
       const despues = nivelActual(total);
       if (despues.id !== antes.id) ui.nivelPendiente = despues;
+      // Bono de nivel: una vez por nivel; se celebra en la hoja de «nivel desbloqueado».
+      const bono = bonosNivel(tiendaDe(), total, hoyIso());
+      if (bono.cantidad) {
+        E().tienda = bono.tienda;
+        salva();
+        ui.bonoPendiente = bono.cantidad;
+      }
       ui.recien = { dia: b.dia, ...cierres(b.dia) };
     }
     navigator.vibrate?.(8);
@@ -1445,7 +1935,12 @@ const acciones = {
     const despues = nivelActual(diasRegistrados());
     ui.hoja = null;
     pinta();
-    if (despues.id !== antes.id) abreHoja({ tipo: 'nivel', nivel: despues });
+    const bono = bonosNivel(tiendaDe(), diasRegistrados(), hoy);
+    if (bono.cantidad) {
+      real.tienda = bono.tienda;
+      salva();
+    }
+    if (despues.id !== antes.id) abreHoja({ tipo: 'nivel', nivel: despues, bono: bono.cantidad });
     else pintaHoja();
     avisa(ok ? `${nuevos.length === 1 ? 'Apuntado 1 día' : `Apuntados ${nuevos.length} días`} · +${nuevos.length * RAYOS.parte} rayos` : 'No se ha podido guardar en este navegador');
   },
@@ -1459,18 +1954,149 @@ const acciones = {
       if (ui.nivelPendiente) {
         const nivel = ui.nivelPendiente;
         ui.nivelPendiente = null;
-        return abreHoja({ tipo: 'nivel', nivel });
+        const bono = ui.bonoPendiente;
+        ui.bonoPendiente = null;
+        return abreHoja({ tipo: 'nivel', nivel, bono });
       }
     }
     pintaHoja();
     if (cerrada?.tipo === 'nivel' && ui.pestana === 'calendario') pinta();
     cerrada?.alCerrar?.();
   },
+  abrirTienda(d = {}) {
+    ui.hoja = null;
+    pintaHoja();
+    ui.vistaTienda = d.vista === 'coleccion' ? 'coleccion' : 'tienda';
+    ui.pestana = 'tienda';
+    pinta({ arriba: true });
+  },
+  abrirColeccion(d = {}) {
+    ui.coleccionFiltro = d.tipo || null;
+    acciones.abrirTienda({ vista: 'coleccion' });
+  },
+  vistaTienda(d) {
+    ui.vistaTienda = d.id;
+    pinta({ arriba: true });
+  },
+  /** Toque sin rayos: la tarjeta tiembla, el candado del cofre traquetea, el saldo late, vibra un poco y se dice cuánto falta. */
+  sinRayos(d, el) {
+    const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!quieto) {
+      const tarjeta = el?.closest('.objeto, .cofre-tarjeta');
+      const pill = $('.saldo-pill');
+      for (const x of [tarjeta, pill]) {
+        if (!x) continue;
+        x.classList.remove('sacude', 'late');
+        void x.offsetWidth; // reinicia la animación si se toca varias veces seguidas
+        x.classList.add(x === pill ? 'late' : 'sacude');
+        setTimeout(() => x.classList.remove('sacude', 'late'), 420);
+      }
+    }
+    if (NATIVO) nativo('haptico', { tipo: 'aviso' });
+    else navigator.vibrate?.(30);
+    avisa(`Te faltan ${d.falta} ⚡`);
+  },
+  probar(d) {
+    ui.menuModos = false;
+    abreHoja({ tipo: 'probar', id: d.id });
+  },
+  menuModos() {
+    ui.menuModos = !ui.menuModos;
+    pintaHoja();
+  },
+  eligeModo(d) {
+    const id = d.id || null;
+    E().tienda = equipar(tiendaDe(), 'personalidad', id);
+    salva();
+    ui.menuModos = false;
+    ui.chat.push({ de: 'sistema', texto: id ? `Stormy ahora habla en modo ${nombreModo(id).toLowerCase()}` : 'Stormy vuelve a hablar como siempre' });
+    pintaHoja();
+    pinta();
+  },
+  equiparProbado() {
+    const o = objeto(ui.hoja?.id);
+    if (!o) return;
+    E().tienda = equipar(tiendaDe(), o.tipo, o.id);
+    salva();
+    ui.hoja = null;
+    pintaHoja();
+    pinta();
+    avisa(`${o.nombre}: equipado`);
+  },
+  comprarProbado() {
+    const o = objeto(ui.hoja?.id);
+    const r = o && comprar(tiendaDe(), o.id, rayosDeEstado(E()), hoyIso());
+    if (!r?.ok) return avisa(r?.faltan ? `Te faltan ${r.faltan} ⚡` : r?.motivo ?? 'No se ha podido');
+    E().tienda = equipar(r.tienda, o.tipo, o.id);
+    salva();
+    ui.hoja = null;
+    pintaHoja();
+    pinta();
+    avisa(`${o.nombre}: ¡ya es tuyo y lo llevas puesto!`);
+  },
+  filtraColeccion(d) {
+    ui.coleccionFiltro = d.id || null;
+    pinta();
+  },
+  irAObjeto(d) {
+    ui.vistaTienda = 'tienda';
+    pinta();
+    document.getElementById(`objeto-${d.id}`)?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  },
+  verProbabilidades(d) {
+    abreHoja({ tipo: 'probabilidades', id: d.id });
+  },
+  irAjustes() {
+    ui.hoja = null;
+    pintaHoja();
+    ui.pestana = 'ajustes';
+    pinta({ arriba: true });
+  },
+  canjear(d) {
+    const r = comprar(tiendaDe(), d.id, rayosDeEstado(E()), hoyIso());
+    if (!r.ok) return avisa(r.faltan ? `Te faltan ${r.faltan} rayos` : r.motivo);
+    E().tienda = r.tienda;
+    salva();
+    avisa(`${objeto(d.id).nombre}: ¡ya es tuyo!`);
+    if (objeto(d.id).tipo === 'comodin') usaComodinSiToca();
+    pinta();
+  },
+  abrirCofre(d) {
+    const r = abreCofreTienda(tiendaDe(), d.id, rayosDeEstado(E()), { gratis: d.gratis || null, hoy: hoyIso() });
+    if (!r.ok) return avisa(r.faltan ? `Te faltan ${r.faltan} rayos` : r.motivo);
+    E().tienda = r.tienda;
+    salva();
+    const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    abreHoja({ tipo: 'cofre', cofre: d.id, premio: r.premio, rareza: r.rareza, duplicado: r.duplicado, rayos: r.rayos, final: quieto });
+  },
+  saltarCofre() {
+    if (ui.hoja?.tipo !== 'cofre' || ui.hoja.final) return;
+    ui.hoja.final = true;
+    pintaHoja();
+  },
+  equiparPremio() {
+    const p = ui.hoja?.premio;
+    if (p) E().tienda = equipar(tiendaDe(), p.tipo, p.id);
+    salva();
+    acciones.volverTienda();
+  },
+  volverTienda() {
+    ui.hoja = null;
+    pintaHoja();
+    pinta();
+  },
+  equiparObjeto(d) {
+    E().tienda = equipar(tiendaDe(), d.tipo, d.id || null);
+    salva();
+    pinta();
+    if (ui.hoja) pintaHoja();
+  },
   abrirNiveles() {
     abreHoja({ tipo: 'niveles' });
   },
   abrirTema(d) {
     abreHoja({ tipo: 'tema', id: d.id });
+    if (d.id === 'horoscopo' || d.id === 'conoce') regala(premioCuriosidad(tiendaDe(), d.id === 'horoscopo' ? 'horoscopo' : 'ciclo', hoyIso()), null);
   },
   faseCiclo(d) {
     if (ui.hoja?.tipo !== 'tema') return;
@@ -1479,7 +2105,7 @@ const acciones = {
     document.getElementById(`fase-${d.id}`)?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   },
   abrirHoroscopo() {
-    abreHoja({ tipo: 'tema', id: 'horoscopo' });
+    acciones.abrirTema({ id: 'horoscopo' });
   },
   guardarNacimiento() {
     if (demo) return avisaDemo();
@@ -1491,7 +2117,17 @@ const acciones = {
     pintaHoja();
   },
   abrirNimbo() {
-    if (!ui.chat.length) ui.chat.push({ de: 'nimbo', texto: saludo(contextoNimbo()) });
+    if (!ui.chat.length) {
+      ui.chat.push({ de: 'nimbo', texto: conPersonalidad(saludo(contextoNimbo()), equipadoDe('personalidad')) });
+      // Primera charla tras el cofre de bienvenida: Stormy cuenta qué ha tocado (una vez por perfil).
+      const t = tiendaDe();
+      const regalo = objeto(t.historial.find((h) => h.cofre === COFRE_GRATIS)?.premio);
+      if (regalo?.tipo === 'personalidad' && !t.avisoModo) {
+        ui.chat.push({ de: 'nimbo', texto: `¡Te ha tocado el modo ${PERSONALIDADES[regalo.id].nombre.toLowerCase()}! Pruébalo en el selector de modo, junto al botón de enviar.` });
+        E().tienda = { ...t, avisoModo: true };
+        salva();
+      }
+    }
     abreHoja({ tipo: 'nimbo' });
   },
   preguntar(d) {
@@ -1674,7 +2310,7 @@ async function comparte(texto) {
 document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-accion]');
   if (!el || el.disabled) return;
-  acciones[el.dataset.accion]?.(el.dataset);
+  acciones[el.dataset.accion]?.(el.dataset, el);
 });
 
 function alCambiar(ev) {
@@ -1829,6 +2465,7 @@ document.addEventListener('visibilitychange', async () => {
     if (!ui.hoja) pinta();
   }
   ofreceRecuperacion();
+  usaComodinSiToca();
 });
 
 // Con el teclado abierto en el móvil, la ventana del chat sube para que el campo de texto siga a la vista.
@@ -1848,6 +2485,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 pinta();
 // Quien ya había terminado la bienvenida pero no vio el recorrido (o lo dejó a medias) lo ve al entrar.
 if (!demo && real.perfil.alta && !real.perfil.recorrido && !new URLSearchParams(location.search).has('hoja')) empiezaRecorrido();
+usaComodinSiToca();
+bonosPendientes();
 vuelcaPendientes().then(() => {
   // Si se abre directamente el registro (enlace del aviso), no se interrumpe con la oferta de días pendientes.
   if (!new URLSearchParams(location.search).has('hoja')) setTimeout(ofreceRecuperacion, 400);

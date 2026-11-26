@@ -6,12 +6,13 @@ import { FASES, SEMANA, aIso, aNum, diaSemana, diasDePronostico, nivelActual, ni
 import { TIEMPOS, consejoDe, horoscopoDe } from './contenido.js';
 import { estacion, faseLunar, textoLuz } from './cielo.js';
 import { quienDe } from './datos.js';
+import { BONO_NIVEL, CHAT, COFRES, COLECCIONABLES, CURIOSIDAD, GARANTIA, RAREZAS, chatHoy, cofresGratis, destacadoDe, garantiaEn, saldo, tiendaVacia } from './tienda.js';
 
 export const NIMBO = { nombre: 'Stormy', cargo: 'Predictor de tormentas' };
 
 /** Preguntas sugeridas; la del ciclo solo aparece si el ciclo está activado. */
 export const sugerenciasDe = (perfil) => [
-  '¿Qué tal hoy?', '¿Y mañana?', '¿Qué influye en el ambiente de casa?', '¿Qué dice el horóscopo de hoy?',
+  '¿Qué tal hoy?', '¿Y mañana?', '¿Qué influye en el ambiente de casa?', '¿Qué hay en la tienda?', '¿Qué dice el horóscopo de hoy?',
   ...(perfil?.sigueCiclo ? ['¿Cómo funciona el ciclo menstrual?'] : []),
   '¿Cuándo propongo un plan?', '¿Aciertas mucho?', '¿Cómo va el mes?',
 ];
@@ -59,6 +60,61 @@ export function responder(pregunta, ctx, giro = 0) {
   const visibles = diasDePronostico(dias);
 
   if (!q.trim()) return r('vacio', 'Te escucho. Pregúntame por hoy, por mañana o por cuándo proponer un plan.');
+
+  // --- La tienda: rayos, colección, cofres y garantías. Todo es de adorno; los rayos no tocan el pronóstico. ---
+  const tienda = ctx.tienda ?? tiendaVacia();
+  const ganados = ctx.ganados ?? 0;
+  const misRayos = saldo(ganados, tienda);
+  const faltanObjetos = COLECCIONABLES.filter((o) => !tienda.comprados.includes(o.id));
+  const pct = (v) => `${Math.round(v * 100)} %`;
+  if (hay(' gano rayos', ' ganar rayos', ' conseguir rayos', ' consigo rayos', ' sacar rayos')) {
+    const quedaChat = Math.max(0, CHAT.topeDia - chatHoy(tienda, hoy));
+    return r('tienda-ganar', `Así se ganan rayos: 10 por cada parte, 2 por cada dato extra y 20 por cada bloque de 7 partes (más un cofre gratis). Al subir de nivel, un bono: ${Object.entries(BONO_NIVEL).map(([d, n]) => `día ${d}, +${n}`).join('; ')}. Charlar conmigo: +${CHAT.primera} la primera pregunta del día y alguna sorpresa, hasta ${CHAT.topeDia} al día; hoy te quedan ${quedaChat}. Y +${CURIOSIDAD} al día por mirar tu horóscopo y otros +${CURIOSIDAD} por «Conoce el ciclo». Son solo para la tienda: el pronóstico no se compra.`);
+  }
+  if (hay(' cuantos rayos', ' mis rayos', ' rayos tengo', ' saldo')) {
+    return r('tienda-saldo', `Tienes ${misRayos} rayos para gastar.${cofresGratis(tienda, dias) ? ' Y un cofre gratis esperándote en la tienda.' : ''} Los rayos no cambian mi pronóstico: aquí no se compran soles.`);
+  }
+  if (hay(' cuando', ' cuanto falta', ' seguro', ' garantiz') && hay(' legendari')) {
+    const g = garantiaEn(tienda);
+    return r('tienda-garantia', `Llevas ${tienda.pity.sinLegendario} cofres sin legendario. Como mucho en ${plural(g.legendario, 'cofre', 'cofres')} te toca uno seguro (garantía de ${GARANTIA.legendario}). Y un raro, como muy tarde, en ${plural(g.raro, 'cofre', 'cofres')}.`);
+  }
+  if (hay(' probabilidad', ' posibilidad', ' cuantas veces', ' porcentaje', ' odds') && hay(' legendari', ' cofre', ' raro')) {
+    return r('tienda-probabilidad', `Probabilidad de legendario: ${COFRES.map((c) => `${c.nombre.toLowerCase()}, ${pct(c.prob.legendario)}`).join('; ')}. Además, al cofre ${GARANTIA.legendario} sin legendario te toca uno seguro, y al ${GARANTIA.raro} sin raro, un raro. Si sale algo que ya tienes, eliges lo que no tienes primero; solo con la rareza completa te lo cambio por rayos.`);
+  }
+  if (hay(' que me falta', ' me queda por', ' conseguir', ' coleccion', ' completar')) {
+    if (!faltanObjetos.length) return r('tienda-falta', 'Lo tienes todo. Colección completa: eres oficialmente la casa mejor vestida del barrio meteorológico.');
+    const enTiendaFaltan = faltanObjetos.filter((o) => o.via === 'tienda');
+    const enCofres = faltanObjetos.filter((o) => o.via === 'cofre');
+    const ejemplos = enTiendaFaltan.slice(0, 3).map((o) => o.nombre.toLowerCase()).join(', ');
+    const tiendaTxt = enTiendaFaltan.length ? `${plural(enTiendaFaltan.length, 'está', 'están')} en la tienda (${ejemplos}${enTiendaFaltan.length > 3 ? '…' : ''})` : 'de la tienda ya lo tienes todo';
+    const cofreTxt = enCofres.length ? `${plural(enCofres.length, 'sale', 'salen')} solo en cofres, y no te digo cuáles: es parte de la gracia` : 'y de los exclusivos de cofre no te falta ninguno';
+    return r('tienda-falta', `Te faltan ${faltanObjetos.length} de ${COLECCIONABLES.length}: ${tiendaTxt}; ${cofreTxt}.`);
+  }
+  if (hay(' recomiend', ' que compro', ' que me compro', ' en que gasto', ' merece la pena comprar') && hay(' compr', ' gast', ' tienda', ' rayos')) {
+    const g = garantiaEn(tienda);
+    const masBarato = COFRES[0];
+    if (g.legendario <= 3 && misRayos >= masBarato.precio) {
+      return r('tienda-consejo', `Con ${misRayos} rayos, yo abriría un ${masBarato.nombre.toLowerCase()}: te faltan ${plural(g.legendario, 'cofre', 'cofres')} para el legendario seguro.`);
+    }
+    const asequibles = faltanObjetos.filter((o) => o.via === 'tienda' && o.precio <= misRayos).sort((a, b) => a.precio - b.precio);
+    if (asequibles.length) {
+      const o = asequibles[0];
+      return r('tienda-consejo', `Con ${misRayos} rayos, mi recomendación es ${o.nombre.toLowerCase()} (${RAREZAS[o.rareza].nombre.toLowerCase()}, ${o.precio} rayos): lo más barato que aún no tienes. Es de adorno, que conste.`);
+    }
+    const proximo = faltanObjetos.filter((o) => o.via === 'tienda').sort((a, b) => a.precio - b.precio)[0];
+    if (!proximo && faltanObjetos.length) {
+      return r('tienda-consejo', misRayos >= masBarato.precio
+        ? `De la tienda ya lo tienes todo. Lo que te falta solo sale en cofres: con ${misRayos} rayos, un ${masBarato.nombre.toLowerCase()} y a ver qué cae.`
+        : `De la tienda ya lo tienes todo; lo que queda sale en cofres. Junta ${masBarato.precio} rayos para el ${masBarato.nombre.toLowerCase()}.`);
+    }
+    return r('tienda-consejo', proximo
+      ? `Ahora tienes ${misRayos} rayos. Lo más barato que te falta es ${proximo.nombre.toLowerCase()}, por ${proximo.precio}: unos días más apuntando y es tuyo.`
+      : `Ya lo tienes todo. Guarda los rayos para el comodín de racha, por si algún día se te pasa apuntar.`);
+  }
+  if (hay(' tienda', ' cofre', ' que puedo comprar', ' que hay para comprar')) {
+    const d = destacadoDe(hoy, tienda);
+    return r('tienda', `En mi tienda hay caras para mí, escenas para la pantalla de «Hoy», temas de color, reacciones, personalidades para el chat y el comodín de racha, todo de adorno.${d ? ` Hoy destaco: ${d.nombre.toLowerCase()} (${d.precio} rayos).` : ''} Algunas cosas solo salen en cofres; hay cofres desde ${COFRES[0].precio} rayos, con las probabilidades a la vista. Tienes ${misRayos} rayos.`);
+  }
 
   // --- Quién es y qué hace con los datos ---
   if (hay(' quien eres', ' como te llamas', ' que eres', ' presentate', ' tu nombre')) {
@@ -110,7 +166,7 @@ export function responder(pregunta, ctx, giro = 0) {
   if (hay(' nivel', ' racha', ' cuanto falta', ' cuantos dias', ' progreso', ' desbloque', ' llevo')) {
     const n = nivelActual(dias);
     const s = nivelSiguiente(dias);
-    const rch = racha(Object.keys(entradas), hoy);
+    const rch = ctx.racha ?? racha(Object.keys(entradas), hoy);
     return r('nivel', s
       ? `Eres «${n.titulo}» con ${plural(dias, 'día', 'días')}, una racha de ${rch}${ctx.rayos != null ? ` y ${ctx.rayos} rayos` : ''}. Te faltan ${s.dias - dias} para ser «${s.titulo}» y desbloquear: ${premioDe(s, perfil.sigueCiclo).toLowerCase()}.`
       : `Eres «${n.titulo}»: ${plural(dias, 'parte', 'partes')} y racha de ${rch}. Ya no quedan mundos por abrir, solo más puntería para mí.`);
@@ -256,6 +312,26 @@ export function responder(pregunta, ctx, giro = 0) {
     'Esa nube no la tengo catalogada. Prueba con: «¿qué tal hoy?», «¿y mañana?», «¿cuándo propongo un plan?» o «¿qué influye en el ambiente de casa?».',
     'Ahí me pillas fuera de cobertura. Yo entiendo de hoy, mañana, la semana, lo que influye en casa, los niveles y de si acierto o no.',
   ]));
+}
+
+/**
+ * Personalidades de la tienda: solo cambian el estilo del saludo y de la reacción al registrar.
+ * El contenido (datos, honestidad, lo que no sabe) es el mismo.
+ */
+export const PERSONALIDADES = {
+  telediario: { nombre: 'Telediario', descripcion: 'Serio y con corbata, como en la tele', entrada: 'Buenas noches y bienvenidos al parte de casa.', cierre: 'Les seguiremos informando.', corto: 'Les seguiremos informando.' },
+  abuela: { nombre: 'Abuela', descripcion: 'Cariñoso y preocupado por si has comido', entrada: 'Ay, cariño, qué alegría verte.', cierre: '¿Has comido bien? Abrígate, que refresca.', corto: 'Abrígate, cariño.' },
+  poeta: { nombre: 'Poeta', descripcion: 'Todo en verso, o casi', entrada: 'Bajo el cielo de esta casa, ni una nube pasa sin que la escriba en verso.', cierre: 'Y así, entre nubes y claros, sigue el poema del hogar.', corto: 'Y así sigue el poema del hogar.' },
+};
+export const MODO_NORMAL = { nombre: 'Normal', descripcion: 'El Stormy de siempre', entrada: '¡Buenas!' };
+
+/** Respuestas del chat con el modo elegido: solo una coletilla al final; lo que dice no cambia. */
+export const conEstilo = (texto, modo) => (PERSONALIDADES[modo] ? `${texto} ${PERSONALIDADES[modo].corto}` : texto);
+
+/** Viste un texto con la personalidad elegida. Sin personalidad (o una desconocida), lo deja igual. */
+export function conPersonalidad(texto, modo) {
+  const p = PERSONALIDADES[modo];
+  return p ? `${p.entrada} ${texto} ${p.cierre}` : texto;
 }
 
 /** Saludo inicial, según lo que ya sabe y cómo llaman a quien pregunta. */

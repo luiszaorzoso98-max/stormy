@@ -2,6 +2,7 @@
 // La copia de seguridad y el código de traspaso los genera y los guarda la propia persona; nada sale solo.
 import { aIso, aNum, diaSemana, fase, hoyIso, rayosDe } from './motor.js';
 import { ETIQUETAS } from './contenido.js';
+import { normalizaTienda, rachaProtegida, saldo, tiendaVacia } from './tienda.js';
 
 const CLAVE = 'stormy.v1';
 const CLAVE_ANTERIOR = 'sicielo.v1'; // nombre provisional anterior: se siguen leyendo sus datos
@@ -33,7 +34,7 @@ export const entradaVacia = () => ({
   animo: null, sueno: null, estres: null, juntos: null, manana: null, etiquetas: [], nota: '', regla: false, orientativo: false,
 });
 
-export const estadoVacio = () => ({ perfil: perfilVacio(), entradas: {} });
+export const estadoVacio = () => ({ perfil: perfilVacio(), entradas: {}, tienda: tiendaVacia() });
 
 const ES_DIA = /^\d{4}-\d{2}-\d{2}$/;
 const ES_HORA = /^\d{2}:\d{2}$/;
@@ -92,7 +93,8 @@ export function normaliza(e) {
     const n = diaValido(dia) && normalizaEntrada(origen[dia]);
     if (n) entradas[dia] = n;
   }
-  return { perfil, entradas };
+  // La tienda (objetos, rayos gastados, cofres): los estados antiguos no tenían, así que nace vacía.
+  return { perfil, entradas, tienda: normalizaTienda(e?.tienda) };
 }
 
 let memoria = null; // respaldo si el navegador no deja usar localStorage (modo privado estricto)
@@ -151,7 +153,14 @@ export const extrasDe = (e) =>
 
 export const totalExtras = (estado) => Object.values(estado.entradas).reduce((n, e) => n + extrasDe(e), 0);
 
+/** Rayos ganados en total (partes, datos extra y bloques de 7). */
 export const rayosDeEstado = (estado) => rayosDe(Object.keys(estado.entradas).length, totalExtras(estado));
+
+/** Rayos que se pueden gastar en la tienda: ganados − gastados (+ los devueltos por duplicados). */
+export const rayosDisponibles = (estado) => saldo(rayosDeEstado(estado), estado.tienda ?? tiendaVacia());
+
+/** Racha contando los días salvados con un comodín. */
+export const rachaDe = (estado, hoy = hoyIso()) => rachaProtegida(Object.keys(estado.entradas), estado.tienda?.comodin?.usados ?? [], hoy);
 
 export const muestrasDe = (estado) =>
   Object.entries(estado.entradas).map(([dia, e]) => ({
@@ -282,5 +291,5 @@ export function ejemplo(dias = 30, perfilReal = perfilVacio(), hoyTexto = hoyIso
     };
     if (regla) perfil.ultimaRegla = aIso(n);
   }
-  return { perfil, entradas };
+  return { perfil, entradas, tienda: tiendaVacia() };
 }
