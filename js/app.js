@@ -4,16 +4,29 @@ import {
   nivelActual, nivelSiguiente, premioDe, racha, tiempoDe,
 } from './motor.js';
 import {
-  APP, AVISO_CICLO, CADA_PERSONA, ENLACE_LUNA, ETIQUETAS, FASES_INFO, FICHAS_CICLO, HOROSCOPO_DETRAS, HORMONAS, ICONOS, INSIGNIAS,
-  ORDEN_TIEMPOS, TIEMPOS, avatarNimbo, consejoDe, ficha, horoscopoDe, iconoTiempo, lunaSVG, nubeSuelta, signo, solSuelto, stormyPortada,
+  APP, AVISO_CICLO, CADA_PERSONA, textosConoceCiclo, ENLACE_LUNA, ETIQUETAS, FASES_INFO, FICHAS_CICLO, HOROSCOPO_DETRAS, HORMONAS, ICONOS, INSIGNIAS,
+  ORDEN_TIEMPOS, TEXTOS_AVISO, TIEMPOS, avatarNimbo, consejoDe, ficha, horoscopoDe, iconoTiempo, lunaSVG, nubeSuelta, signo, solSuelto, stormyPortada,
 } from './contenido.js';
 import { NIMBO, reaccion, responder, saludo, sugerenciasDe } from './asistente.js';
 import { capacidad, muestraAviso, pidePermiso, recogePendientes } from './avisos.js';
 import { faseLunar } from './cielo.js';
 import {
   PARENTESCOS, RELACIONES, aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, entradaVacia,
-  extrasDe, guardar, muestrasDe, rayosDeEstado, reglasDe, totalExtras,
+  extrasDe, fusionaRespuestas, guardar, muestrasDe, rayosDeEstado, reglasDe, totalExtras,
 } from './datos.js';
+
+// ---------- App nativa de iPhone ----------
+// Dentro de la app nativa (un visor de esta misma web), el aviso diario lo programa el iPhone y se responde
+// desde la propia notificación. La app nativa avisa de que está ahí con `window.STORMY_NATIVO`.
+const NATIVO = !!(globalThis.STORMY_NATIVO && globalThis.webkit?.messageHandlers?.stormy);
+const nativo = (tipo, datos = {}) => {
+  try {
+    globalThis.webkit.messageHandlers.stormy.postMessage({ ...datos, tipo }); // `tipo` siempre manda
+  } catch {
+    /* fuera de la app nativa no hay a quién avisar */
+  }
+};
+const textoAvisoNativo = (hora) => TEXTOS_AVISO.nativo.confirmacion(hora);
 
 // ---------- Estado ----------
 
@@ -126,24 +139,59 @@ const esAndroid = () => /android/i.test(navigator.userAgent);
 const enAppAjena = () => /FBAN|FBAV|FB_IAB|Instagram|Line\/|WhatsApp|Twitter|TikTok|musical_ly|LinkedInApp|Snapchat|Pinterest|GSA\/|MicroMessenger|Telegram/i.test(navigator.userAgent);
 
 const pasosAlta = () => [
-  'presentacion', 'portada', ...(enPantallaDeInicio() ? [] : ['instalar']), 'juego', 'quien',
+  'presentacion', 'portada', ...(enPantallaDeInicio() || NATIVO ? [] : ['instalar']), 'juego', 'quien',
   ...(ui.alta.relacion === 'pareja' ? ['ciclo'] : []), 'aviso',
 ];
 
+// Dibujos sencillos de lo que enseña Safari en cada paso, con la parte que hay que tocar resaltada.
+const resalte = (x, y, w, h, r = 10) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="none" stroke="#FF6B5E" stroke-width="3"/>`;
+const filaHoja = (y, texto, icono, marcada) => `<g><rect x="16" y="${y}" width="248" height="34" rx="9" fill="var(--relleno)"/>
+  <text x="30" y="${y + 22}" class="mock-txt">${texto}</text><g transform="translate(232 ${y + 8})" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round">${icono}</g>
+  ${marcada ? resalte(12, y - 4, 256, 42, 12) : ''}</g>`;
+const ICO_MAS = '<rect x="1" y="1" width="16" height="16" rx="4"/><path d="M9 5v8M5 9h8"/>';
+const ICO_COPIAR = '<rect x="5" y="5" width="11" height="11" rx="2.5"/><path d="M2 12V3.5A1.5 1.5 0 0 1 3.5 2H12"/>';
+const ICO_ESTRELLA = '<path d="M9 1.5l2.3 4.8 5.2.7-3.8 3.6.9 5.1L9 13.3l-4.6 2.4.9-5.1L1.5 7l5.2-.7z"/>';
+const ICO_FLECHA = '<path d="M4 7l5 5 5-5"/>';
+const ICO_COMPARTIR = '<path d="M9 11V1.5M5.5 5L9 1.5 12.5 5M4 8v7.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V8"/>';
+const circuloHoja = (x, texto, icono, marcado) => `<g><circle cx="${x}" cy="40" r="24" fill="var(--relleno)"/>
+  <g transform="translate(${x - 9} 31)" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">${icono}</g>
+  <text x="${x}" y="84" class="mock-txt" text-anchor="middle">${texto}</text>${marcado ? resalte(x - 33, 10, 66, 84, 18) : ''}</g>`;
+// Lo que enseña Safari en iOS 26: menú ≡ → Compartir → Ver más → Añadir a pantalla de inicio → Añadir.
+const MOCKS_IOS = [
+  // 1. Barra de Safari: menú y, en él, «Compartir»
+  `<rect x="10" y="8" width="210" height="44" rx="12" fill="var(--tarjeta)" stroke="var(--linea)"/>
+   <g transform="translate(24 21)" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">${ICO_COMPARTIR}</g>
+   <text x="54" y="36" class="mock-txt">Compartir</text>${resalte(6, 4, 218, 52, 14)}
+   <rect x="10" y="76" width="260" height="48" rx="24" fill="var(--relleno)"/>
+   <g stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"><path d="M28 92l-8 8 8 8"/><path d="M58 92h16M58 100h16M58 108h11"/></g>
+   <text x="160" y="105" class="mock-txt" text-anchor="middle">stormy</text>${resalte(48, 80, 36, 40, 12)}`,
+  // 2. Hoja de compartir: «Ver más»
+  `${circuloHoja(40, 'Copiar', ICO_COPIAR)}${circuloHoja(107, 'Marcadores', '<path d="M4 2h10v15l-5-4-5 4z"/>')}${circuloHoja(174, 'Lectura', '<circle cx="4" cy="10" r="3.5"/><circle cx="14" cy="10" r="3.5"/><path d="M7.5 10h3"/>')}${circuloHoja(241, 'Ver más', ICO_FLECHA, true)}`,
+  // 3. La lista que se despliega: «Añadir a pantalla de inicio»
+  `${filaHoja(8, 'Añadir a favoritos', ICO_ESTRELLA)}${filaHoja(48, 'Buscar en la página', '<circle cx="8" cy="8" r="5"/><path d="M12 12l4 4"/>')}${filaHoja(88, 'Añadir a pantalla de inicio', ICO_MAS, true)}`,
+  // 4. Pantalla final: «Añadir», arriba a la derecha
+  `<rect x="10" y="10" width="260" height="44" rx="12" fill="var(--relleno)"/>
+   <text x="24" y="38" class="mock-txt tenue">✕</text><text x="130" y="38" class="mock-txt" text-anchor="middle" font-weight="700">Añadir a inicio</text>
+   <text x="256" y="38" class="mock-txt azul" text-anchor="end" font-weight="700">Añadir</text>${resalte(206, 16, 58, 32, 10)}
+   <rect x="20" y="66" width="52" height="52" rx="13" fill="#2E2466"/><path d="M33 98a6 6 0 0 1 0-12 9 9 0 0 1 17-2 7 7 0 0 1 2 14z" fill="#fff"/><path d="M45 94l-5 7h4l-2 6 6-8h-4l2-5z" fill="#FFC94D"/>
+   <text x="86" y="90" class="mock-txt">Stormy</text><text x="86" y="108" class="mock-txt tenue">Así aparecerá el icono</text>`,
+];
+const PASOS_IOS = [
+  ['Toca ≡ y luego «Compartir»', 'El menú ≡ está en la barra de abajo de Safari. Si ves directamente el cuadrado con una flecha, tócalo.'],
+  ['Toca «Ver más»', 'En la hoja que se abre, el círculo con la flecha hacia abajo.'],
+  ['«Añadir a pantalla de inicio»', 'Aparece en la lista, con un cuadrado con un +. Si no lo ves, desliza hacia arriba.'],
+  ['Toca «Añadir»', 'Arriba a la derecha. Stormy aparece con su icono, como una app más: ábrela desde ahí.'],
+];
+
 function guiaInstalar() {
-  if (esIOS() && enAppAjena()) {
-    return tarjeta(`<div class="fila"><span class="acento">${ICONOS.compartir}</span><div><strong>Ábrelo en Safari</strong>
-      <p>Estás viendo Stormy dentro de otra app y desde aquí no se puede instalar. Copia el enlace, abre Safari y pégalo en la barra de direcciones.</p></div></div>
-      <button type="button" class="principal suave" data-accion="copiarEnlace">${ICONOS.copiar}<span>Copiar enlace</span></button>`, 'cristal');
+  if (enAppAjena()) {
+    return tarjeta(`<div class="fila"><span class="acento">${ICONOS.compartir}</span><div><strong>Ábrelo en ${esIOS() ? 'Safari' : 'el navegador'}</strong>
+      <p>Estás viendo Stormy dentro de otra app y desde aquí no se puede instalar. Copia el enlace, abre ${esIOS() ? 'Safari' : 'el navegador'} y pégalo en la barra de direcciones.</p></div></div>
+      <button type="button" class="principal suave con-margen" data-accion="copiarEnlace">${ICONOS.copiar}<span>Copiar enlace</span></button>`, 'cristal');
   }
   if (esIOS()) {
-    const pasoIOS = (n, icono, titulo, texto) =>
-      `<li><span class="num">${n}</span><span class="dibujo">${ICONOS[icono]}</span><div><strong>${titulo}</strong><p>${texto}</p></div></li>`;
-    return tarjeta(`<ol class="pasos-ios">
-      ${pasoIOS(1, 'compartir', 'Toca Compartir', 'El cuadrado con la flecha, en la barra de Safari.')}
-      ${pasoIOS(2, 'mas', '«Añadir a pantalla de inicio»', 'Desliza la lista hacia abajo hasta encontrarlo.')}
-      ${pasoIOS(3, 'visto', 'Toca «Añadir»', 'Stormy aparece con su icono, como una app más.')}
-    </ol>`, 'cristal');
+    return `<ol class="pasos-instalar">${PASOS_IOS.map(([t, x], i) => `<li class="tarjeta cristal"><div class="paso-cab"><span class="num">${i + 1}</span><div><strong>${t}</strong><p>${x}</p></div></div>
+      <svg class="mock" viewBox="0 0 280 ${i === 1 ? 100 : 130}" role="img" aria-label="Paso ${i + 1}: ${t}">${MOCKS_IOS[i]}</svg></li>`).join('')}</ol>`;
   }
   if (ui.instalar) {
     return tarjeta(`<button type="button" class="principal" data-accion="instalar">${ICONOS.mas}<span>Instalar Stormy</span></button>
@@ -153,6 +201,10 @@ function guiaInstalar() {
     ? 'En el menú del navegador (⋮), elige «Instalar aplicación» o «Añadir a pantalla de inicio».'
     : 'Abre este enlace en el móvil para instalar Stormy en la pantalla de inicio. En el ordenador, el navegador puede ofrecer «Instalar» en la barra de direcciones.'}</p>`, 'cristal');
 }
+
+/** Móvil sin instalar y fuera de la app nativa: es cuando hay que insistir en instalar. */
+const faltaInstalar = () => !NATIVO && !enPantallaDeInicio() && (esIOS() || esAndroid());
+const POR_QUE_INSTALAR = 'Sin instalarla no hay avisos, y Safari puede borrar tus partes si pasas unos días sin abrirla.';
 
 function bienvenida() {
   const a = ui.alta;
@@ -176,7 +228,7 @@ function bienvenida() {
         fila('calendario', 'Resultados desde la primera semana', 'A los 7 días ya ves los primeros patrones. Stormy los estudia y pronostica con criterio.') +
         fila('destello', 'Pronostico con humor', 'Previsión y consejos para llegar a casa con paraguas… o con planes.'),
         'cristal filas')}`,
-    instalar: () => `${titulo('Stormy, a un toque', 'Instálala en la pantalla de inicio: se abre como una app y tus partes quedan mejor guardados.')}
+    instalar: () => `<div class="titulo-paso importante"><span class="etiqueta-importante">Importante</span><h1>Paso importante: instala Stormy</h1><p>${POR_QUE_INSTALAR}</p></div>
       ${guiaInstalar()}`,
     juego: () => `${titulo('Juego limpio', 'Antes de empezar, lo más importante.')}
       <div class="escena ${a.consiente ? 'on' : ''}" aria-hidden="true"><span class="escena-sol">${solSuelto(84)}</span><span class="escena-nube">${nubeSuelta(96)}</span></div>
@@ -211,7 +263,7 @@ function bienvenida() {
           <span class="baja-flecha">${ICONOS.subir}</span>
           <div class="cinco">${ORDEN_TIEMPOS.map((t) => ficha(t, 42)).join('')}</div>
         </div>
-        <p class="nota centro"><strong>Dos toques: abres el aviso y eliges.</strong></p>`, 'cristal')}
+        <p class="nota centro"><strong>${NATIVO ? TEXTOS_AVISO.nativo.paso : TEXTOS_AVISO.web.paso}</strong></p>`, 'cristal')}
       ${tarjeta(`<label class="linea sin-margen"><span><strong>Hora del aviso</strong></span><input type="time" data-modelo="alta.hora" value="${a.hora}"></label>
         <p class="nota">Puedes cambiar la hora cuando quieras en Ajustes.</p>`, 'cristal')}`,
   };
@@ -229,7 +281,10 @@ function bienvenida() {
       ${ultimo
         ? `<button class="principal" data-accion="terminar" data-aviso="1">Activar aviso y empezar</button>
            <button class="secundario" data-accion="terminar">Empezar sin aviso</button>`
-        : `<button class="principal" data-accion="siguiente" ${bloqueado ? 'disabled' : ''}>${ui.paso === 0 ? 'Empezar' : 'Continuar'}</button>
+        : id === 'instalar' && (esIOS() || esAndroid())
+          ? `<button class="principal" data-accion="siguiente">Ya la he instalado</button>
+             <button class="enlace-pequeno" data-accion="instalarLuego">Ahora no</button>`
+          : `<button class="principal" data-accion="siguiente" ${bloqueado ? 'disabled' : ''}>${ui.paso === 0 ? 'Empezar' : 'Continuar'}</button>
            ${ui.paso > 0 ? '<button class="secundario" data-accion="atras">Atrás</button>' : ''}`}
     </footer>
   </main>`;
@@ -268,7 +323,11 @@ function vistaHoy() {
   const sig = nivelSiguiente(dias);
   const s = perfil.nacimiento ? signo(perfil.nacimiento) : null;
 
+  const avisoInstalar = faltaInstalar() && !instalarOcultoHoy()
+    ? `<div class="aviso-instalar" role="status"><button type="button" data-accion="verInstalar">${ICONOS.subir}<span>Stormy no está instalada · <u>Cómo instalar</u></span></button>
+        <button type="button" class="cerrar" data-accion="ocultarInstalar" aria-label="Ocultar hasta mañana">×</button></div>` : '';
   return `<main class="hoy">
+    ${avisoInstalar}
     <header class="cabecera">
       <div><h1>${esc(casaDe(perfil))}</h1><p>${fechaLarga(hoy)}</p></div>
       <button type="button" class="icono-boton" data-accion="compartir" aria-label="Compartir el parte de hoy">${ICONOS.compartir}</button>
@@ -299,6 +358,25 @@ function vistaHoy() {
       <p class="nota">${sig ? `${faltan(sig.dias - dias)} para «${premioDe(sig, perfil.sigueCiclo)}»` : 'Todos los mundos abiertos: Stormy ya conoce vuestro clima.'}</p>
     </button>
   </main>`;
+}
+
+// El aviso de instalar se puede ocultar hasta el día siguiente (preferencia de este navegador, no un dato de la casa).
+const CLAVE_INSTALAR = 'stormy.instalarOculto';
+function instalarOcultoHoy() {
+  try {
+    return localStorage.getItem(CLAVE_INSTALAR) === hoyIso();
+  } catch {
+    return false;
+  }
+}
+
+function hojaInstalar() {
+  return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>
+    <div class="hoja-cuerpo instalar-hoja">
+      <h2>Instala Stormy</h2>
+      <p class="fecha">${POR_QUE_INSTALAR}</p>
+      ${guiaInstalar()}
+    </div>`;
 }
 
 // ---------- Registro: un toque guarda; lo demás es opcional ----------
@@ -495,7 +573,7 @@ function preguntaANimbo(texto) {
 function hojaConfirmar() {
   const c = ui.hoja;
   return `<div class="hoja-cuerpo celebracion"><h2>${c.titulo}</h2><p>${c.texto}</p></div>
-    <div class="hoja-pie"><button class="principal ${c.suave ? '' : 'peligro'}" data-accion="${c.accion}">${c.boton}</button><button class="secundario oscuro" data-accion="cerrarHoja">${c.cancelar ?? 'Cancelar'}</button></div>`;
+    <div class="hoja-pie"><button class="principal ${c.suave ? '' : 'peligro'}" data-accion="${c.accion}">${c.boton}</button><button class="secundario oscuro" data-accion="${c.accion2 ?? 'cerrarHoja'}">${c.cancelar ?? 'Cancelar'}</button></div>`;
 }
 
 function hojaTexto() {
@@ -529,7 +607,7 @@ function hojaAviso() {
       <span class="insignia grande">${ICONOS.campana}</span>
       <h2>Falta la alarma</h2>
       <p>${estado} Por ahora Stormy no puede enviarte el aviso diario por su cuenta: el recordatorio va por tu calendario, con una alarma a las ${esc(real.perfil.horaAviso)} y un enlace que abre el registro.</p>
-      <p><strong>Dos toques: abres el aviso y eliges.</strong></p>
+      <p><strong>${TEXTOS_AVISO.web.paso}</strong></p>
     </div>
     <div class="hoja-pie"><button class="principal" data-accion="recordatorio" data-cierra="1">Añadir alarma al calendario</button><button class="secundario oscuro" data-accion="cerrarHoja">Ahora no</button></div>`;
 }
@@ -565,7 +643,7 @@ function vistaCalendario() {
     const futuro = iso > hoy;
     const regla = sigue ? marcaRegla(m, iso, registradas) : null;
     const luz = lunesRecien != null && n0 + i >= lunesRecien && n0 + i < lunesRecien + 7;
-    celdas += `<button type="button" class="dia ${iso === hoy ? 'hoy' : ''} ${futuro ? 'futuro' : ''} ${e?.orientativo ? 'orientativo' : ''} ${recien?.dia === iso ? 'recien' : ''} ${luz ? 'fila-luz' : ''} ${regla ? `regla-${regla}` : ''}" ${futuro ? 'disabled' : ''} data-accion="abrirRegistro" data-dia="${iso}"
+    celdas += `<button type="button" class="dia ${iso === hoy ? 'es-hoy' : ''} ${futuro ? 'futuro' : ''} ${e?.orientativo ? 'orientativo' : ''} ${recien?.dia === iso ? 'recien' : ''} ${luz ? 'fila-luz' : ''} ${regla ? `regla-${regla}` : ''}" ${futuro ? 'disabled' : ''} data-accion="abrirRegistro" data-dia="${iso}"
       aria-label="${fecha(iso, { day: 'numeric', month: 'long' })}: ${e ? `${TIEMPOS[e.animo].titulo}${e.orientativo ? ', apuntado de memoria' : ''}` : futuro ? 'día futuro' : 'sin registrar'}${regla ? `, regla ${regla}` : ''}">
       <span>${i + 1}</span>${e ? ficha(e.animo, 34) : `<span class="vacio">${iso === hoy ? ICONOS.mas : ''}</span>`}</button>`;
   }
@@ -696,15 +774,15 @@ function vistaDescubrimientos() {
   const faseHoy = hoyDia ? FASES.find((f) => f.id === m.fase(hoyIso())) : null;
   const s = perfil.nacimiento ? signo(perfil.nacimiento) : null;
   const luna = faseLunar(hoyIso());
-  const ciclo = perfil.sigueCiclo
-    ? `<button type="button" class="destacada ciclo-card" data-accion="abrirTema" data-id="conoce">
-        ${ruedaCiclo(m, 58)}<span><strong>Conoce el ciclo</strong><small>${faseHoy ? `Hoy: ${faseHoy.titulo.toLowerCase()}` : 'Las fases, una a una'}</small></span></button>`
-    : '';
+  // «Conoce el ciclo» está siempre: con el ciclo activado, personalizado; sin él, la versión general.
+  const tc = textosConoceCiclo(perfil.sigueCiclo, faseHoy?.titulo ?? null);
+  const ciclo = `<button type="button" class="destacada ciclo-card ${tc.personal ? '' : 'general'}" data-accion="abrirTema" data-id="conoce">
+      ${ruedaCiclo(m, 58)}<span><strong>Conoce el ciclo</strong><small>${tc.sub}</small></span></button>`;
   const horoscopoCard = `<button type="button" class="destacada horoscopo-card" data-accion="abrirTema" data-id="horoscopo">
       <span class="signo-grande" aria-hidden="true">${s ? s.emoji : lunaSVG(luna, 52)}</span><span><strong>Tu horóscopo</strong><small>${s ? `${s.nombre} · ${luna.nombre.toLowerCase()}` : 'Añádelo con una fecha'}</small></span></button>`;
   return `<main class="pagina descubrimientos">
     <h1>Descubrimientos</h1>
-    <div class="destacadas ${ciclo ? '' : 'una'}">${ciclo}${horoscopoCard}</div>
+    <div class="destacadas">${ciclo}${horoscopoCard}</div>
     <h2 class="seccion">Lo que Stormy aprende de vuestra casa</h2>
     <div class="circulos">${circulos}</div>
     <p class="aviso">Los patrones salen solo de vuestros registros. Con pocos días son orientativos.</p>
@@ -902,12 +980,13 @@ function conoceCiclo(m) {
   const todas = [...new Map([...FASES.flatMap((f) => FASES_INFO[f.id].fuentes), ...fuentesConsulta].map((x) => [x[1], x])).values()];
   return `<p class="aviso-sanitario">${AVISO_CICLO}</p>
     <div class="tarjeta rueda-tarjeta">${ruedaCiclo(m, 220, { interactiva: true, elegida })}
-      <p class="mini centro">Ciclo de ${L} días. Toca una fase para ver su explicación.${m.diaCiclo(hoyIso()) ? ' El círculo blanco marca hoy (estimado).' : ''}</p></div>
+      <p class="mini centro">Ciclo de ${L} días${m.sigueCiclo ? '' : ' de ejemplo'}. Toca una fase para ver su explicación.${m.diaCiclo(hoyIso()) ? ' El círculo blanco marca hoy (estimado).' : ''}</p></div>
     ${graficoHormonas(faseHoy)}
     <h3 class="subtitulo">Fase a fase</h3>
     ${fases}
     ${desplegable(FICHAS_CICLO[FICHAS_CICLO.length - 1][0], `<p>${FICHAS_CICLO[FICHAS_CICLO.length - 1][1]}</p>`, { icono: 'gota' })}
     ${desplegable('Fuentes', fuentes(todas), { icono: 'libro' })}
+    ${textosConoceCiclo(E().perfil.sigueCiclo).nota ? `<p class="mini centro">${textosConoceCiclo(E().perfil.sigueCiclo).nota}</p>` : ''}
     <p class="aviso-sanitario">${AVISO_CICLO}</p>`;
 }
 
@@ -916,7 +995,7 @@ function conoceCiclo(m) {
 function vistaAjustes() {
   const p = E().perfil;
   let instalar = '';
-  if (!enPantallaDeInicio()) {
+  if (!enPantallaDeInicio() && !NATIVO) {
     instalar = `<h2 class="seccion">Instalar</h2><div class="tarjeta lista">${
       ui.instalar
         ? '<button type="button" class="enlace" data-accion="instalar">Instalar en este dispositivo</button>'
@@ -947,12 +1026,17 @@ function vistaAjustes() {
     </div>
     <p class="pie-seccion">Opcional, y solo si le apetece compartirlo. Es un dato de salud: no sale de este dispositivo.</p>
     <h2 class="seccion">Recordatorio</h2>
-    <div class="tarjeta lista">
+    ${NATIVO ? `<div class="tarjeta lista">
+      ${interruptor('perfil.avisoActivo', p.avisoActivo, 'Aviso diario')}
+      <label class="linea"><span>Hora del aviso</span><input type="time" data-modelo="perfil.horaAviso" value="${p.horaAviso}"></label>
+      <button type="button" class="enlace" data-accion="probarAviso">Probar el aviso</button>
+    </div>
+    <p class="pie-seccion">${p.avisoActivo ? textoAvisoNativo(esc(p.horaAviso)) : 'Sin aviso diario. Actívalo para que el iPhone te pregunte cada día; se responde sin abrir la app.'}</p>` : `<div class="tarjeta lista">
       <label class="linea"><span>Hora del aviso</span><input type="time" data-modelo="perfil.horaAviso" value="${p.horaAviso}"></label>
       <button type="button" class="enlace" data-accion="recordatorio">Añadir alarma diaria al calendario</button>
       <button type="button" class="enlace" data-accion="probarAviso">Probar el aviso</button>
     </div>
-    <p class="pie-seccion">Dos toques: abres el aviso y eliges. La alarma es un evento diario de tu calendario con un enlace al registro; para quitarla, bórrala desde el calendario.</p>
+    <p class="pie-seccion">${TEXTOS_AVISO.web.ajustes}</p>`}
     ${instalar}
     <h2 class="seccion">Modo demostración</h2>
     <div class="tarjeta lista">
@@ -1118,11 +1202,12 @@ function pintaFondo(tiempo) {
 
 const HOJAS = {
   registro: hojaRegistro, niveles: hojaNiveles, nivel: hojaNivelNuevo, confirmar: hojaConfirmar, texto: hojaTexto, nimbo: hojaNimbo,
-  recuperar: hojaRecuperar, tema: hojaTema, codigo: hojaCodigo, aviso: hojaAviso,
+  recuperar: hojaRecuperar, tema: hojaTema, codigo: hojaCodigo, aviso: hojaAviso, instalar: hojaInstalar,
 };
 const TITULOS_HOJA = {
   registro: 'Registrar el parte', niveles: 'Niveles', nivel: 'Nivel desbloqueado', confirmar: 'Confirmación', texto: 'Información',
   nimbo: 'Hablar con Stormy', recuperar: 'Días sin apuntar', tema: 'Descubrimiento', codigo: 'Código de traspaso', aviso: 'Recordatorio',
+  instalar: 'Cómo instalar Stormy',
 };
 
 function pintaHoja(nueva = false) {
@@ -1161,6 +1246,8 @@ function avisa(texto) {
 const avisaDemo = () => avisa('Datos de ejemplo: aquí no se guarda nada');
 
 function descarga(nombre, tipo, contenido) {
+  // En la app nativa el archivo se entrega al iPhone, que abre la hoja de compartir (Guardar en Archivos, etc.).
+  if (NATIVO) return nativo('compartirArchivo', { nombre, mime: tipo, contenido });
   const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
   const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
   document.body.append(a);
@@ -1215,6 +1302,30 @@ const acciones = {
     ui.paso++;
     pinta({ arriba: true });
   },
+  /** «Ahora no» en el paso de instalar: antes de seguir, se explica qué se pierde. */
+  instalarLuego() {
+    abreHoja({
+      tipo: 'confirmar', suave: true, titulo: '¿Seguir sin instalar?',
+      texto: 'Sin instalar Stormy no podrá avisarte cada día, y Safari puede borrar los datos de las webs que no abres en unos días: perderías tus partes y tu progreso.',
+      boton: 'Instalar ahora', accion: 'cerrarHoja', cancelar: 'Seguir sin instalar', accion2: 'seguirSinInstalar',
+    });
+  },
+  seguirSinInstalar() {
+    ui.hoja = null;
+    pintaHoja();
+    acciones.siguiente();
+  },
+  verInstalar() {
+    abreHoja({ tipo: 'instalar' });
+  },
+  ocultarInstalar() {
+    try {
+      localStorage.setItem(CLAVE_INSTALAR, hoyIso());
+    } catch {
+      /* sin almacenamiento: se ocultará solo hasta que se repinte */
+    }
+    $('.aviso-instalar')?.remove();
+  },
   atras() {
     ui.paso = Math.max(0, ui.paso - 1);
     pinta({ arriba: true });
@@ -1222,7 +1333,7 @@ const acciones = {
   async terminar(d) {
     const a = ui.alta;
     let permiso = null;
-    if (d.aviso) {
+    if (d.aviso && !NATIVO) {
       // El permiso se pide aquí, con el toque de la persona; el aviso diario en sí va por el calendario (ver avisos.js).
       permiso = await pidePermiso().catch(() => 'no-disponible');
     }
@@ -1231,12 +1342,17 @@ const acciones = {
       apodo: a.apodo.trim(), miApodo: a.miApodo.trim(), relacion: a.relacion ?? 'pareja',
       parentesco: a.relacion === 'familia' ? a.parentesco : null,
       nacimiento: a.conNacimiento ? a.nacimiento : null, sigueCiclo: conCiclo,
-      duracion: a.duracion, ultimaRegla: conCiclo ? a.ultimaRegla : null, consentimiento: hoyIso(), horaAviso: a.hora, alta: true, recorrido: false,
+      duracion: a.duracion, ultimaRegla: conCiclo ? a.ultimaRegla : null, consentimiento: hoyIso(), horaAviso: a.hora, avisoActivo: !!d.aviso && NATIVO, alta: true, recorrido: false,
     });
     guardar(real);
     ui.pestana = 'hoy';
     pinta({ arriba: true });
-    if (d.aviso) abreHoja({ tipo: 'aviso', permiso, alCerrar: empiezaRecorrido });
+    if (d.aviso && NATIVO) {
+      // En la app nativa el iPhone pide el permiso y programa el aviso diario de verdad.
+      nativo('programarAviso', { hora: a.hora, nombre: real.perfil.apodo });
+      avisa(textoAvisoNativo(a.hora));
+      empiezaRecorrido();
+    } else if (d.aviso) abreHoja({ tipo: 'aviso', permiso, alCerrar: empiezaRecorrido });
     else empiezaRecorrido();
   },
   pasoNumero(d) {
@@ -1427,6 +1543,10 @@ const acciones = {
     pinta({ arriba: true });
   },
   async probarAviso() {
+    if (NATIVO) {
+      nativo('probarAviso');
+      return avisa('El aviso llega en unos 10 segundos: sal de la app para verlo');
+    }
     const antes = capacidad();
     let r;
     try {
@@ -1462,7 +1582,7 @@ const acciones = {
   },
   exportar() {
     descarga(`stormy-${hoyIso()}.json`, 'application/json', aCopia(real));
-    avisa('Copia guardada en tus descargas');
+    if (!NATIVO) avisa('Copia guardada en tus descargas');
   },
   recuperarCopia() {
     if (demo) return avisaDemo();
@@ -1580,11 +1700,17 @@ function alCambiar(ev) {
     }
     const p = real.perfil;
     if (campo === 'conNacimiento') p.nacimiento = valor ? '1992-06-15' : null;
+    else if (campo === 'avisoActivo') {
+      p.avisoActivo = valor;
+      if (valor) nativo('programarAviso', { hora: p.horaAviso, nombre: p.apodo });
+      else nativo('cancelarAviso');
+    }
     else if (campo === 'sigueCiclo') {
       p.sigueCiclo = valor;
       if (valor && !p.ultimaRegla) p.ultimaRegla = hoyIso();
     } else if (!casilla && !valor && el.type !== 'text') return;
     else p[campo] = valor;
+    if (campo === 'horaAviso' && NATIVO && p.avisoActivo) nativo('programarAviso', { hora: p.horaAviso, nombre: p.apodo });
     ui.muestra = null;
     salva();
     if (casilla) pinta();
@@ -1662,15 +1788,32 @@ addEventListener('resize', () => {
 async function vuelcaPendientes() {
   const pendientes = await recogePendientes();
   if (!pendientes.length || !real.perfil.alta) return;
-  for (const { dia, animo } of pendientes) {
-    const e = real.entradas[dia];
-    if (e) e.animo = animo;
-    else real.entradas[dia] = { ...entradaVacia(), animo };
-  }
+  fusionaRespuestas(real, pendientes);
   guardar(real);
   if (!ui.hoja) pinta();
   avisa('Parte apuntado desde el aviso');
 }
+// La app nativa entrega aquí lo respondido desde la notificación y abre el registro al tocar el aviso.
+globalThis.stormyRecibe = (respuestas) => {
+  const dias = fusionaRespuestas(real, respuestas);
+  if (!dias.length) return [];
+  const ok = guardar(real);
+  if (!ui.hoja) pinta();
+  else if (ui.hoja.tipo === 'registro' && dias.includes(ui.borrador?.dia)) {
+    ui.borrador.animo = real.entradas[ui.borrador.dia].animo;
+    pintaHoja();
+  }
+  avisa(ok ? 'Parte apuntado desde el aviso' : 'No se ha podido guardar en este navegador');
+  // Solo se confirman los días guardados, para que la app nativa los quite de su lista.
+  if (ok) nativo('respuestasRecibidas', { dias });
+  return dias;
+};
+globalThis.stormyAviso = (texto) => avisa(String(texto));
+globalThis.stormyAbrir = (que) => {
+  if (que === 'registro' && real.perfil.alta && !demo && ui.hoja?.tipo !== 'registro') acciones.abrirRegistro({});
+};
+if (NATIVO) document.documentElement.classList.add('nativa');
+
 navigator.serviceWorker?.addEventListener('message', (ev) => {
   if (ev.data?.tipo === 'respuesta-aviso') vuelcaPendientes();
   if (ev.data?.tipo === 'abrir-registro' && real.perfil.alta && !ui.hoja) acciones.abrirRegistro({});

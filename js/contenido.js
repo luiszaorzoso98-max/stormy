@@ -63,6 +63,23 @@ export const TIEMPOS = {
 };
 export const ORDEN_TIEMPOS = [5, 4, 3, 2, 1];
 
+/**
+ * Textos del recordatorio. En la web el aviso se toca y se elige (dos toques: las opciones dentro del aviso
+ * no aparecen al mantenerlo pulsado). Solo la app nativa del iPhone responde con una pulsación larga.
+ */
+export const TEXTOS_AVISO = {
+  web: {
+    paso: 'Dos toques: toca el aviso y elige.',
+    ajustes: 'Toca el aviso y elige: son dos toques. La alarma es un evento diario de tu calendario con un enlace al registro; para quitarla, bórrala desde el calendario.',
+    confirmacion: (hora) => `El recordatorio va por tu calendario, con una alarma a las ${hora}. Toca el aviso y elige.`,
+  },
+  nativo: {
+    paso: 'Mantén pulsado el aviso y elige: no hace falta abrir la app.',
+    ajustes: (hora) => `Te avisaremos cada día a las ${hora}. Mantén pulsado el aviso y elige.`,
+    confirmacion: (hora) => `Te avisaremos cada día a las ${hora}. Mantén pulsado el aviso y elige.`,
+  },
+};
+
 const diaDelAno = (iso) => {
   const [a, m, d] = iso.split('-').map(Number);
   return Math.round((Date.UTC(a, m - 1, d) - Date.UTC(a, 0, 0)) / 864e5);
@@ -263,6 +280,18 @@ export const FASES_INFO = {
     fuentes: [F.nhsSpm, F.owhSpm, F.medlineSpm],
   },
 };
+/**
+ * Textos de «Conoce el ciclo». Sin el ciclo activado se enseña la versión general (sin «hoy» ni fechas personales)
+ * y solo una línea discreta sobre Ajustes. Con el ciclo activado, la fase de hoy.
+ * @param {boolean} sigueCiclo  @param {string|null} faseHoy título de la fase de hoy, si se conoce
+ */
+export function textosConoceCiclo(sigueCiclo, faseHoy = null) {
+  if (!sigueCiclo) {
+    return { sub: 'Opcional · Conoce cómo funciona el ciclo', nota: 'Si os apetece, podéis activarlo en Ajustes.', personal: false };
+  }
+  return { sub: faseHoy ? `Hoy: ${faseHoy.toLowerCase()}` : 'Las fases, una a una', nota: null, personal: true };
+}
+
 export const CADA_PERSONA = 'Cada persona vive el ciclo de forma distinta, y la duración cambia de una persona a otra y de un mes a otro. Esta información sirve para entender, no para etiquetar.';
 
 /**

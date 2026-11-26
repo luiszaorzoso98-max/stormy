@@ -5,7 +5,7 @@ import {
   Motor, NIVELES, NIVELES_BASE, PESO_ORIENTATIVO, RAYOS, aIso, aNum, diaSemana, diasDePronostico, fase, nivelActual, nivelSiguiente,
   FASES, estadoHoy, marcaRegla, premioDe, racha, rayosDe,
 } from '../js/motor.js';
-import { APP, FASES_INFO, HORMONAS, TIEMPOS, caminoLuna, signo } from '../js/contenido.js';
+import { APP, FASES_INFO, HORMONAS, TEXTOS_AVISO, TIEMPOS, caminoLuna, signo, textosConoceCiclo } from '../js/contenido.js';
 
 const BASE = '2026-11-02'; // lunes
 const dia = (i) => aIso(aNum(BASE) + i);
@@ -323,4 +323,50 @@ test('cada tiempo tiene su versión honda para el modo oscuro, legible con texto
     assert.equal(campo.length, 3);
     for (const c of campo) assert.ok(contraste(c, '#F4F2FB') >= 7, `${t} ${c} ${contraste(c, '#F4F2FB').toFixed(1)}`);
   }
+});
+
+test('en la web nunca se dice «Mantén pulsado» el aviso: solo en la app nativa', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const pulsar = /mant[eé]n pulsad[oa] (el|este) aviso|mant[eé]n pulsad[oa] y elige/i;
+  const textos = (o) => Object.values(o).map((v) => (typeof v === 'function' ? v('21:30') : v));
+  for (const t of textos(TEXTOS_AVISO.web)) assert.doesNotMatch(t, pulsar, t);
+  for (const t of textos(TEXTOS_AVISO.web)) assert.match(t, /toca el aviso y elige/i, t);
+  assert.ok(textos(TEXTOS_AVISO.nativo).every((t) => /Mantén pulsado el aviso y elige/.test(t)));
+  // Fuera de TEXTOS_AVISO.nativo, ningún archivo de la web lo dice (ni el aviso del servicio de trabajo).
+  const raiz = new URL('../', import.meta.url);
+  const archivos = [
+    ...readdirSync(new URL('js/', raiz)).filter((f) => f.endsWith('.js')).map((f) => new URL(`js/${f}`, raiz)),
+    new URL('sw.js', raiz), new URL('index.html', raiz),
+  ];
+  for (const url of archivos) {
+    let fuente = readFileSync(url, 'utf8');
+    if (url.pathname.endsWith('contenido.js')) fuente = fuente.replace(/  nativo: \{[\s\S]*?\n  \},/, '');
+    assert.doesNotMatch(fuente, pulsar, url.pathname);
+  }
+});
+
+test('«Conoce el ciclo»: general sin el ciclo activado, personal con él', () => {
+  const general = textosConoceCiclo(false, 'Fase lútea');
+  assert.equal(general.personal, false);
+  assert.equal(general.sub, 'Opcional · Conoce cómo funciona el ciclo');
+  assert.equal(general.nota, 'Si os apetece, podéis activarlo en Ajustes.');
+  assert.doesNotMatch(general.sub, /hoy|lútea/i); // nada personal aunque se pase una fase
+  const personal = textosConoceCiclo(true, 'Fase lútea');
+  assert.deepEqual(personal, { sub: 'Hoy: fase lútea', nota: null, personal: true });
+  assert.equal(textosConoceCiclo(true).sub, 'Las fases, una a una');
+});
+
+test('calendario: la casilla de hoy no hereda los estilos de la pantalla «Hoy»', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  // Cada selector con la clase «hoy» debe ir atado a <main>; si no, también afectaría a una casilla del calendario.
+  const selectores = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+(?=\{)/g).flatMap((s) => s.split(','));
+  for (const s of selectores) {
+    for (const m of s.matchAll(/(\S*)\.hoy(?![\w-])/g)) assert.match(m[1], /main$/, `selector suelto: ${s.trim()}`);
+  }
+  // La casilla de hoy usa su propia clase y todas las casillas reservan el mismo hueco para la marca de la regla.
+  assert.match(app, /iso === hoy \? 'es-hoy'/);
+  assert.doesNotMatch(app, /iso === hoy \? 'hoy'/);
+  assert.match(css, /\.dia > span:first-child \{[^}]*border-bottom: 2\.5px solid transparent/);
 });

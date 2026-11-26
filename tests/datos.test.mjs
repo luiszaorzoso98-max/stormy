@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aIso, aNum } from '../js/motor.js';
 import {
-  aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, extrasDe, guardar, muestrasDe,
+  aCodigo, aCopia, borrarTodo, cargar, casaDe, deCodigo, deCopia, diasPendientes, ejemplo, extrasDe, fusionaRespuestas, guardar, muestrasDe,
   normaliza, quienDe, rayosDeEstado,
 } from '../js/datos.js';
 
@@ -174,4 +174,35 @@ test('días pendientes: entre el último parte y ayer', () => {
   // Hoy no cuenta como pendiente aunque ya esté apuntado.
   const conHoy = normaliza({ entradas: { [dia(-3)]: { animo: 3 }, [HOY]: { animo: 4 } } });
   assert.deepEqual(diasPendientes(conHoy, HOY), [dia(-2), dia(-1)]);
+});
+
+test('respuestas desde el aviso: crea el parte o solo cambia el tiempo, y devuelve los días', () => {
+  const e = normaliza({ entradas: { [dia(-1)]: { animo: 2, sueno: 3, etiquetas: ['Deporte'], nota: 'cena', orientativo: true } } });
+  const dias = fusionaRespuestas(e, [{ dia: dia(-1), animo: 5 }, { dia: HOY, animo: 4 }]);
+  assert.deepEqual(dias, [dia(-1), HOY]);
+  // El día que ya existía conserva sus datos extra; solo cambia el tiempo.
+  assert.equal(e.entradas[dia(-1)].animo, 5);
+  assert.equal(e.entradas[dia(-1)].sueno, 3);
+  assert.deepEqual(e.entradas[dia(-1)].etiquetas, ['Deporte']);
+  assert.equal(e.entradas[dia(-1)].nota, 'cena');
+  // El día nuevo nace como un parte normal, con los campos vacíos.
+  assert.deepEqual(e.entradas[HOY], { animo: 4, sueno: null, estres: null, juntos: null, manana: null, etiquetas: [], nota: '', regla: false, orientativo: false });
+});
+
+test('respuestas desde el aviso: ignora lo mal formado', () => {
+  const e = normaliza({});
+  const dias = fusionaRespuestas(e, [
+    { dia: HOY, animo: 0 }, { dia: HOY, animo: 6 }, { dia: HOY, animo: 2.5 }, { dia: 'ayer', animo: 3 }, { dia: '2026-02-31', animo: 3 },
+    null, 'x', { animo: 3 }, { dia: HOY, animo: '3' },
+  ]);
+  assert.deepEqual(dias, [HOY]);
+  assert.equal(e.entradas[HOY].animo, 3);
+  assert.deepEqual(fusionaRespuestas(e, null), []);
+  assert.deepEqual(fusionaRespuestas(e, { dia: HOY, animo: 1 }), []);
+});
+
+test('el aviso diario nativo se guarda en el perfil y nace apagado', () => {
+  assert.equal(normaliza({}).perfil.avisoActivo, false);
+  assert.equal(normaliza({ perfil: { avisoActivo: true } }).perfil.avisoActivo, true);
+  assert.equal(normaliza(ANTIGUO).perfil.avisoActivo, false);
 });

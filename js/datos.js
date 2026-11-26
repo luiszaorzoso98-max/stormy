@@ -23,6 +23,7 @@ export const perfilVacio = () => ({
   ultimaRegla: null,
   consentimiento: null,
   horaAviso: '21:30',
+  avisoActivo: false, // aviso diario de la app nativa (en la web, el recordatorio va por el calendario)
   alta: false,
   recorrido: false, // recorrido guiado ya visto
   ofertaRecuperacion: null, // último día en que se ofreció rellenar días pendientes
@@ -38,7 +39,7 @@ const ES_DIA = /^\d{4}-\d{2}-\d{2}$/;
 const ES_HORA = /^\d{2}:\d{2}$/;
 const nivel3 = (v) => ([1, 2, 3].includes(v) ? v : null);
 const texto = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
-const diaValido = (v) => (typeof v === 'string' && ES_DIA.test(v) && !Number.isNaN(aNum(v)) ? v : null);
+const diaValido = (v) => (typeof v === 'string' && ES_DIA.test(v) && aIso(aNum(v)) === v ? v : null); // descarta fechas imposibles como el 31 de febrero
 
 function normalizaEntrada(e) {
   const animo = Math.round(Number(e?.animo));
@@ -79,6 +80,7 @@ export function normaliza(e) {
     ultimaRegla: diaValido(p.ultimaRegla),
     consentimiento: diaValido(p.consentimiento),
     horaAviso: typeof p.horaAviso === 'string' && ES_HORA.test(p.horaAviso) ? p.horaAviso : base.horaAviso,
+    avisoActivo: !!p.avisoActivo,
     alta: !!p.alta,
     // Quien ya usaba la app no necesita que se le lance el recorrido al actualizar.
     recorrido: p.recorrido ?? !!p.alta,
@@ -172,6 +174,27 @@ export function diasPendientes(estado, hoy = hoyIso()) {
   if (!previos.length) return [];
   const ultimo = Math.max(...previos);
   return Array.from({ length: ayer - ultimo }, (_, i) => aIso(ultimo + 1 + i));
+}
+
+// ---------- Respuestas dadas desde un aviso ----------
+
+/**
+ * Apunta en `estado` las respuestas elegidas en un aviso ([{dia: 'AAAA-MM-DD', animo: 1…5}]).
+ * Si el día ya tenía parte, solo cambia el tiempo y conserva los datos extra; si no, crea el parte.
+ * Ignora las respuestas mal formadas. Devuelve los días apuntados, para confirmarlos a quien los envió.
+ */
+export function fusionaRespuestas(estado, respuestas) {
+  const dias = [];
+  for (const r of Array.isArray(respuestas) ? respuestas : []) {
+    const dia = diaValido(r?.dia);
+    const animo = Number(r?.animo);
+    if (!dia || !Number.isInteger(animo) || animo < 1 || animo > 5) continue;
+    const e = estado.entradas[dia];
+    if (e) e.animo = animo;
+    else estado.entradas[dia] = { ...entradaVacia(), animo };
+    dias.push(dia);
+  }
+  return dias;
 }
 
 // ---------- Copia de seguridad y código de traspaso ----------

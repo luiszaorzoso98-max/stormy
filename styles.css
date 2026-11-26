@@ -232,16 +232,32 @@ body.en-demo main { padding-top: calc(var(--sat) + 52px); }
 .escena.on .escena-nube { transform: translateX(110px) translateY(18px) scale(0.75); opacity: 0.85; }
 .acierto { text-align: center; font-weight: 700; font-size: 17px; animation: entra-burbuja 0.5s var(--sale) 0.3s backwards; }
 
-/* Instalación en iPhone: tres pasos. */
-.pasos-ios { display: flex; flex-direction: column; gap: 14px; }
-.pasos-ios li { display: flex; align-items: center; gap: 12px; animation: entra-burbuja 0.5s var(--sale) backwards; }
-.pasos-ios li:nth-child(2) { animation-delay: 0.15s; }
-.pasos-ios li:nth-child(3) { animation-delay: 0.3s; }
-.pasos-ios .num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--tinta); color: #fff; display: grid; place-items: center; font-size: 14px; font-weight: 700; }
-@media (prefers-color-scheme: dark) { .pasos-ios .num { background: #fff; color: var(--tinta); } }
-.pasos-ios .dibujo { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--relleno); display: grid; place-items: center; color: #2F6BFF; }
-.pasos-ios strong { font-size: 15px; }
-.pasos-ios p { font-size: 14px; color: var(--texto-2); }
+/* Instalación: paso importante, con los cuatro pasos de Safari dibujados. */
+.etiqueta-importante { display: inline-block; padding: 3px 10px; border-radius: 99px; background: var(--mango); color: var(--tinta); font-size: 13px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 8px; }
+.titulo-paso.importante p { font-weight: 600; }
+.pasos-instalar { display: flex; flex-direction: column; gap: 10px; }
+.pasos-instalar li { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; animation: entra-burbuja 0.45s var(--sale) backwards; }
+.pasos-instalar li:nth-child(2) { animation-delay: 0.08s; }
+.pasos-instalar li:nth-child(3) { animation-delay: 0.16s; }
+.pasos-instalar li:nth-child(4) { animation-delay: 0.24s; }
+.paso-cab { display: flex; align-items: center; gap: 12px; }
+.paso-cab .num { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--tinta); color: #fff; display: grid; place-items: center; font-size: 19px; font-weight: 800; }
+@media (prefers-color-scheme: dark) { .paso-cab .num { background: #fff; color: var(--tinta); } }
+.paso-cab strong { font-size: 17px; }
+.paso-cab p { font-size: 14px; color: var(--texto-2); }
+.mock { width: 100%; height: auto; max-width: 320px; align-self: center; color: var(--texto); }
+.mock-txt { font: 600 14px ui-rounded, -apple-system, system-ui, sans-serif; fill: var(--texto); }
+.mock-txt.tenue { fill: var(--texto-2); font-weight: 500; font-size: 13px; }
+.mock-txt.azul { fill: #2F6BFF; }
+.enlace-pequeno { align-self: center; min-height: 44px; padding: 0 16px; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; opacity: 0.85; }
+.instalar-hoja .pasos-instalar li { background: var(--tarjeta); }
+
+/* Aviso en «Hoy» mientras la web no esté instalada. */
+.aviso-instalar { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 12px; border-radius: 16px; background: var(--tinta); color: #fff; font-size: 14px; font-weight: 600; }
+.aviso-instalar > button:first-child { flex: 1; display: flex; align-items: center; gap: 8px; min-height: 40px; text-align: left; }
+.aviso-instalar svg { width: 16px; height: 16px; color: var(--mango); }
+.aviso-instalar .cerrar { flex: none; width: 40px; height: 40px; font-size: 22px; line-height: 1; opacity: 0.8; }
+.aviso-instalar button:focus-visible { outline-color: #fff; }
 
 /* Recordatorio: ejemplo del aviso y las cinco opciones. */
 .aviso-ejemplo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -254,7 +270,7 @@ body.en-demo main { padding-top: calc(var(--sat) + 52px); }
 
 /* ---------- Hoy ---------- */
 
-.hoy { color: var(--sobre); gap: 10px; padding-bottom: calc(var(--sal) + 92px); }
+main.hoy { color: var(--sobre); gap: 10px; padding-bottom: calc(var(--sal) + 92px); }
 .cabecera { display: flex; align-items: center; gap: 4px; }
 .cabecera > div { flex: 1; min-width: 0; }
 .cabecera h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.15; overflow-wrap: anywhere; }
@@ -453,7 +469,7 @@ textarea.codigo { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
 .rejilla.cab span { text-align: center; font-size: 13px; font-weight: 700; color: var(--texto-2); }
 .dia { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0; border-radius: 12px; }
 .dia > span:first-child { font-size: 13px; font-weight: 500; color: var(--texto-2); }
-.dia.hoy > span:first-child { color: var(--acento-texto); font-weight: 700; }
+.dia.es-hoy > span:first-child { color: var(--acento-texto); font-weight: 700; }
 .dia.futuro > span:first-child { color: var(--texto-3); }
 .dia .vacio { width: 34px; height: 34px; border-radius: 10px; border: 1px dashed var(--texto-3); display: grid; place-items: center; color: var(--acento-texto); }
 .dia .vacio svg { width: 14px; height: 14px; }
@@ -462,7 +478,9 @@ textarea.codigo { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
 .dia { padding: 3px 0 5px; }
 /* Días de regla: una línea fina lila bajo el número; continua si se apuntó, punteada si es la estimación. */
 :root { --regla: #9C8DE0; }
-.dia.regla-registrada > span:first-child, .dia.regla-estimada > span:first-child { padding: 0 4px 2px; border-bottom: 2.5px solid var(--regla); line-height: 1.2; }
+/* Todas las casillas llevan la misma línea (transparente si no hay regla): así ninguna cambia de alto. */
+.dia > span:first-child { padding: 0 4px 2px; border-bottom: 2.5px solid transparent; line-height: 1.2; }
+.dia.regla-registrada > span:first-child, .dia.regla-estimada > span:first-child { border-bottom-color: var(--regla); }
 .dia.regla-estimada > span:first-child { border-bottom-style: dotted; }
 .leyenda-regla { display: flex; gap: 16px; margin: -4px 0 12px; font-size: 13px; color: var(--texto-2); }
 .leyenda-regla span { display: inline-flex; align-items: center; gap: 6px; }
@@ -727,7 +745,7 @@ body.con-hoja #nimbo { display: none; }
 
 /* Pantallas bajas (Safari con su barra, móviles pequeños): todo más junto, sin bajar de 13 px. */
 @media (max-height: 800px) {
-  .hoy { gap: 8px; padding-top: calc(var(--sat) + 10px); }
+  main.hoy { gap: 8px; padding-top: calc(var(--sat) + 10px); }
   .cabecera h1 { font-size: 24px; }
   .disco { width: 68px; height: 68px; }
   .disco svg { width: 52px; height: 52px; }

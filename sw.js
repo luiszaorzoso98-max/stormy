@@ -1,6 +1,6 @@
 // Servicio de trabajo: guarda la app en el dispositivo para que funcione sin conexión.
 // Al publicar una versión nueva, cambia VERSION para que los dispositivos se actualicen.
-const VERSION = 'stormy-2.0.0';
+const VERSION = 'stormy-2.1.0';
 const ARCHIVOS = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/app.js', './js/motor.js', './js/contenido.js', './js/datos.js', './js/asistente.js', './js/avisos.js', './js/cielo.js',
@@ -20,11 +20,12 @@ self.addEventListener('activate', (ev) => {
 });
 
 // Red primero para tener siempre la última versión; si no hay conexión, se sirve la copia guardada.
+// `no-cache` obliga a revalidar con el servidor: así nunca se mezcla un archivo nuevo con otro viejo de la caché HTTP.
 self.addEventListener('fetch', (ev) => {
   const peticion = ev.request;
   if (peticion.method !== 'GET' || new URL(peticion.url).origin !== location.origin) return;
   ev.respondWith(
-    fetch(peticion)
+    fetch(peticion, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copia = res.clone();
