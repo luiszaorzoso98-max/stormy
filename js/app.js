@@ -7,6 +7,7 @@ import {
   APP, ETIQUETAS, ICONOS, INSIGNIAS, ORDEN_TIEMPOS, TIEMPOS, avatarNimbo, consejoDe, ficha, fraseHoroscopo, iconoTiempo, signo,
 } from './contenido.js';
 import { NIMBO, responder, saludo } from './asistente.js';
+import { capacidad, muestraAviso, recogePendientes } from './avisos.js';
 import {
   borrarTodo, cargar, extrasDe, guardar, muestrasDe, nombreDe, reglasDe, sembrar, totalExtras,
 } from './datos.js';
@@ -461,6 +462,7 @@ function vistaAjustes() {
     <div class="tarjeta lista">
       <label class="linea"><span>Hora del aviso</span><input type="time" data-modelo="perfil.horaAviso" value="${p.horaAviso}"></label>
       <button type="button" class="enlace" data-accion="recordatorio">Añadir aviso diario al calendario</button>
+      <button type="button" class="enlace" data-accion="probarAviso">Probar aviso con opciones</button>
     </div>
     <p class="pie-seccion">Crea un evento diario con alarma y enlace a la app. Para quitarlo, bórralo desde tu calendario.</p>
     ${instalar}
@@ -711,6 +713,34 @@ const acciones = {
   verPrivacidad() {
     abreHoja({ tipo: 'texto', titulo: 'Privacidad', bloques: PRIVACIDAD });
   },
+  async probarAviso() {
+    const antes = capacidad();
+    let r;
+    try {
+      r = await muestraAviso();
+    } catch (e) {
+      r = { ok: false, motivo: 'error', botones: antes.botones, detalle: String(e?.message ?? e) };
+    }
+    const bloques = [];
+    if (r.ok) {
+      bloques.push(['Aviso enviado', 'Bloquea el móvil y míralo en la pantalla de bloqueo, o baja el centro de notificaciones. Si ves las opciones, elige una y vuelve a abrir Stormy: el parte de hoy debe quedar apuntado.']);
+      bloques.push(['Botones que admite este dispositivo', r.botones >= 5
+        ? `Admite ${r.botones}: caben las cinco opciones.`
+        : r.botones > 0
+          ? `Admite ${r.botones}. Verás solo las ${r.botones} primeras opciones; para el resto, toca el aviso y se abre el registro.`
+          : 'Este sistema no declara botones en los avisos web. Si no aparecen opciones, al tocar el aviso se abrirá el registro para elegir.']);
+    } else if (r.motivo === 'sin-soporte') {
+      bloques.push(['Este navegador no admite avisos', esIOS() && !antes.instalada
+        ? 'En iPhone, los avisos solo funcionan si antes añades Stormy a la pantalla de inicio (botón Compartir → «Añadir a pantalla de inicio») y la abres desde su icono.'
+        : 'Prueba con Safari en iPhone (instalada en la pantalla de inicio) o con Chrome en Android.']);
+    } else if (r.motivo === 'denegado') {
+      bloques.push(['Avisos desactivados', 'Has rechazado los avisos de Stormy. Actívalos en los ajustes del móvil o del navegador y vuelve a probar.']);
+    } else {
+      bloques.push(['No se ha podido mostrar el aviso', r.detalle ?? 'Error desconocido.']);
+    }
+    bloques.push(['Datos técnicos', `Instalada: ${antes.instalada ? 'sí' : 'no'} · Permiso: ${capacidad().permiso} · Botones declarados: ${antes.botones}`]);
+    abreHoja({ tipo: 'texto', titulo: 'Prueba de aviso', bloques });
+  },
   recordatorio() {
     descarga('stormy-recordatorio.ics', 'text/calendar', recordatorioICS(estado.perfil.horaAviso));
     avisa('Abre el archivo para añadirlo a tu calendario');
@@ -823,6 +853,27 @@ addEventListener('beforeinstallprompt', (ev) => {
   if (ui.pestana === 'ajustes' && estado.perfil.alta) pinta();
 });
 
+// Respuestas dadas desde un aviso del sistema: se apuntan al abrir o al volver a la app.
+async function vuelcaPendientes() {
+  const pendientes = await recogePendientes();
+  if (!pendientes.length || !estado.perfil.alta) return;
+  for (const { dia, animo } of pendientes) {
+    const e = estado.entradas[dia];
+    if (e) e.animo = animo;
+    else estado.entradas[dia] = { animo, sueno: null, estres: null, etiquetas: [], nota: '', regla: false };
+  }
+  guardar(estado);
+  if (!ui.hoja) pinta();
+  avisa('Parte apuntado desde el aviso');
+}
+navigator.serviceWorker?.addEventListener('message', (ev) => {
+  if (ev.data?.tipo === 'respuesta-aviso') vuelcaPendientes();
+  if (ev.data?.tipo === 'abrir-registro' && estado.perfil.alta && !ui.hoja) acciones.abrirRegistro({});
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) vuelcaPendientes();
+});
+
 // Al volver a la app otro día, refresca el parte.
 let diaPintado = hoyIso();
 document.addEventListener('visibilitychange', () => {
@@ -848,3 +899,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 pinta();
+vuelcaPendientes();
