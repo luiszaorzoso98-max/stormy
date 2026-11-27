@@ -381,6 +381,15 @@ export const COMPLEMENTOS = {
   corona: '<path d="M21 15l3.5-9 6 6.5L36 5l5.5 7.5L47 6l1 10z" fill="#FFC94D" stroke="#1E2749" stroke-width="1.6" stroke-linejoin="round"/><circle cx="34.5" cy="10.5" r="1.6" fill="#FF6B5E"/>',
   auriculares: '<path d="M13.5 35a18.5 18.5 0 0 1 37 0" fill="none" stroke="#1E2749" stroke-width="3" stroke-linecap="round"/><rect x="9.5" y="30" width="7.5" height="13" rx="3.5" fill="#FF6B5E" stroke="#1E2749" stroke-width="1.2"/><rect x="47" y="30" width="7.5" height="13" rx="3.5" fill="#FF6B5E" stroke="#1E2749" stroke-width="1.2"/>',
   bigote: '<path d="M31.8 37.6c-2-2.8-6.4-2.8-8.6.6 2.2 0 4.2.9 5.4 2.1 1.6 0 2.7-1.1 3.2-2.7zM31.8 37.6c2-2.8 6.4-2.8 8.6.6-2.2 0-4.2.9-5.4 2.1-1.6 0-2.7-1.1-3.2-2.7z" fill="#5A3E0E"/>',
+  // Packs. Dibujos propios: ningún personaje, logotipo ni marca reconocible.
+  // Espacio: casco de cristal con antena y cuello de traje.
+  astronauta: '<circle cx="32" cy="33" r="26.5" fill="#BFD8F2" fill-opacity=".22" stroke="#E8ECF7" stroke-width="2.6"/><path d="M14 24a20 20 0 0 1 12-11" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity=".85"/><path d="M32 6.5V2" stroke="#1E2749" stroke-width="1.8" stroke-linecap="round"/><circle cx="32" cy="2.4" r="2" fill="#FF6B5E"/><rect x="15" y="54" width="34" height="8" rx="4" fill="#E8ECF7" stroke="#1E2749" stroke-width="1.4"/><circle cx="25" cy="58" r="1.4" fill="#4C7BF0"/><circle cx="39" cy="58" r="1.4" fill="#FF6B5E"/>',
+  // Arcade: la nube redibujada en píxeles de 4, con su cara de píxeles (tapa la nube redonda).
+  pixel: '<g shape-rendering="crispEdges"><path d="M20 16h24v4h4v4h8v4h4v20h-4v4H8v-4H4V28h4v-4h8v-4h4z" fill="#fff" stroke="#1E2749" stroke-width="2"/><path d="M22 30h4v4h-4zM38 30h4v4h-4zM24 38h4v3h-4zM28 41h8v3h-8zM36 38h4v3h-4z" fill="#1C2340"/><path d="M13 38h5v4h-5zM46 38h5v4h-5z" fill="#FF6B5E" opacity=".6"/><path d="M24 20h8v4h-8z" fill="#DCE5FC"/></g>',
+  // Navidad: gorro de lana rojo con borde blanco, borla y dos hojas de acebo.
+  'gorro-navidad': '<path d="M17 23c1-10 11-17 24-15 8 1 13 6 15 12l-5 1c-2-3-5-5-8-5 3 2 5 5 5 8z" fill="#D9534F"/><rect x="14" y="20" width="36" height="6.5" rx="3.2" fill="#fff" stroke="#E5D9C3" stroke-width=".8"/><circle cx="55.5" cy="21.5" r="4.4" fill="#fff" stroke="#E5D9C3" stroke-width=".8"/><ellipse cx="20" cy="22.5" rx="3.2" ry="1.7" fill="#3F9E5A" transform="rotate(-25 20 22.5)"/><ellipse cx="24.5" cy="22.5" rx="3.2" ry="1.7" fill="#3F9E5A" transform="rotate(25 24.5 22.5)"/><circle cx="22.3" cy="21.6" r="1.3" fill="#C9302C"/>',
+  // Dibujos animados: contorno grueso y ojos grandes.
+  cartoon: '<path transform="translate(0 4)" d="M18 44a10 10 0 0 1-1.2-19.9 14 14 0 0 1 27-3.6A11.5 11.5 0 0 1 46 44z" fill="none" stroke="#1E2749" stroke-width="3.4" stroke-linejoin="round"/><ellipse cx="25" cy="31.5" rx="5.2" ry="6.4" fill="#fff" stroke="#1E2749" stroke-width="1.8"/><ellipse cx="38.5" cy="31.5" rx="5.2" ry="6.4" fill="#fff" stroke="#1E2749" stroke-width="1.8"/><circle cx="26" cy="33" r="2.8" fill="#1C2340"/><circle cx="39.5" cy="33" r="2.8" fill="#1C2340"/><circle cx="27" cy="31.6" r="1" fill="#fff"/><circle cx="40.5" cy="31.6" r="1" fill="#fff"/><path d="M25.5 40.5q6.5 6 13 0" fill="#1C2340" stroke="#1C2340" stroke-width="2" stroke-linejoin="round"/>',
 };
 
 /** Retrato de Stormy. Con `especial` lleva la corona del último mundo; `cara` es un complemento de la tienda. */
@@ -400,6 +409,19 @@ const PELOTA = '<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="
 const COMETA = '<svg class="cometa" viewBox="0 0 70 140" aria-hidden="true"><path d="M35 4l22 26-22 30-22-30z" fill="#FF6B5E"/><path d="M35 4v56M13 30h44" stroke="#fff" stroke-width="2"/><path d="M35 60q-8 14 2 26t-4 26 4 24" fill="none" stroke="#1E2749" stroke-width="1.5"/><path d="M31 74l8 3-8 3zM33 96l8 3-8 3z" fill="#FFC94D"/></svg>';
 const ARCOIRIS = '<svg class="arco-escena" viewBox="0 0 200 110" aria-hidden="true">' + ['#FF6B5E', '#FFC94D', '#8EE0C8', '#8FA8F0', '#C9BFF0'].map((c, i) => `<path d="M${10 + i * 10} 105a${90 - i * 10} ${90 - i * 10} 0 0 1 ${180 - i * 20} 0" fill="none" stroke="${c}" stroke-width="10"/>`).join('') + '</svg>';
 
+const PLANETA = '<svg class="planeta" viewBox="0 0 80 50" aria-hidden="true"><ellipse cx="40" cy="27" rx="38" ry="9" fill="none" stroke="#FFC94D" stroke-width="3" opacity=".9"/><circle cx="40" cy="25" r="17" fill="#8FA8F0"/><path d="M26 19q14 6 28 0M24 28q16 5 32 0" stroke="#fff" stroke-width="2" fill="none" opacity=".45"/><path d="M2 27a38 9 0 0 0 76 0" fill="none" stroke="#FFC94D" stroke-width="3"/></svg>';
+const LUNITA = '<svg class="lunita" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#C9BFF0"/><circle cx="7" cy="8" r="2" fill="#fff" opacity=".4"/><circle cx="13" cy="13" r="1.4" fill="#fff" opacity=".35"/></svg>';
+// Figurita de píxeles para el salón recreativo: Stormy en miniatura con su rayo, nada reconocible de ningún juego.
+const SPRITE = '<svg class="sprite" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path d="M5 2h5v1h1v1h3v1h1v5h-1v1H2v-1H1V5h1V4h2V3h1z" fill="#fff"/><path d="M5 6h1v1H5zM10 6h1v1h-1zM6 8h4v1H6z" fill="#1C2340"/><path d="M8 11h2l-1 2h2l-3 3 1-2H7z" fill="#FFC94D"/></svg>';
+const REJILLA = '<svg class="rejilla-neon" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true"><g stroke="#FF4FD8" stroke-width=".8" fill="none" opacity=".8">' +
+  [0, 8, 18, 31, 47].map((y) => `<path d="M0 ${13 + y}H200"/>`).join('') +
+  Array.from({ length: 11 }, (_, i) => `<path d="M${100 + (i - 5) * 12} 13L${100 + (i - 5) * 60} 60"/>`).join('') + '</g><path d="M0 13H200" stroke="#3DF5FF" stroke-width="1.4"/></svg>';
+const LUCES = '<svg class="guirnalda" viewBox="0 0 200 30" preserveAspectRatio="none" aria-hidden="true"><path d="M0 4q25 18 50 4t50 0 50 0 50 0" fill="none" stroke="#1E2749" stroke-width="1" opacity=".5"/></svg>' +
+  Array.from({ length: 9 }, (_, i) => `<i class="bombilla-luz" style="left:${5 + i * 11}%;top:${[16, 32, 38, 26, 16, 30, 36, 24, 16][i]}%;background:${['#FFC94D', '#E85D5D', '#5DBB7A', '#FFC94D', '#E85D5D', '#5DBB7A', '#FFC94D', '#E85D5D', '#5DBB7A'][i]};animation-delay:${(i * 0.37 % 2).toFixed(2)}s"></i>`).join('');
+const ABETOS = '<svg class="abetos" viewBox="0 0 120 50" aria-hidden="true"><path d="M20 6l12 18h-6l10 14H4l10-14H8z" fill="#3F9E5A" opacity=".85"/><path d="M96 2l14 22h-7l11 16H78l11-16h-7z" fill="#2F7E46" opacity=".85"/><rect x="18" y="38" width="4" height="6" fill="#6B4A2B"/><rect x="94" y="40" width="4" height="6" fill="#6B4A2B"/></svg>';
+const NUBE_VINETA = (clase) => `<svg class="nube-vineta ${clase}" viewBox="0 0 64 40" aria-hidden="true"><path d="M14 34a9 9 0 0 1-1-18 12 12 0 0 1 23-4 10 10 0 0 1 18 6 8 8 0 0 1-2 16z" fill="#fff" stroke="#1E2749" stroke-width="2.6" stroke-linejoin="round"/></svg>`;
+const ONOMATOPEYA = (texto, clase, color) => `<span class="onomatopeya ${clase}"><svg viewBox="0 0 100 60" aria-hidden="true"><path d="M50 2l8 12 14-8-2 15 16-2-10 12 14 8-16 3 6 14-15-6-5 13-8-12-10 11-2-15-15 5 7-13-14-6 15-5-8-13 16 3 2-15z" fill="${color}" stroke="#1E2749" stroke-width="2.4" stroke-linejoin="round"/><text x="50" y="36" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="12" textLength="38" lengthAdjust="spacingAndGlyphs" fill="#1E2749">${texto}</text></svg></span>`;
+
 /** Capa de cada escena. Solo se animan transformaciones y opacidad; con «reducir movimiento» se queda quieta. */
 export const ESCENAS = {
   // Todas las escenas se dibujan dentro de la franja de «Hoy» reservada para ellas (ver .escena-banda).
@@ -410,6 +432,12 @@ export const ESCENAS = {
   estrellas: () => Array.from({ length: 14 }, (_, i) => `<i class="estrella" style="left:${(i * 13.7 + 4) % 96}%;top:${(i * 23.3 + 6) % 80 + 5}%;animation-delay:${((i * 0.41) % 3).toFixed(2)}s"></i>`).join('') + '<i class="fugaz"></i><i class="fugaz dos"></i>',
   arcoiris: () => ARCOIRIS,
   cometa: () => `<span class="cometa-ruta">${COMETA}</span>`,
+  // Packs
+  espacio: () => Array.from({ length: 12 }, (_, i) => `<i class="estrella astro" style="left:${(i * 13.7 + 4) % 96}%;top:${(i * 23.3 + 6) % 80 + 5}%;animation-delay:${((i * 0.41) % 3).toFixed(2)}s"></i>`).join('') +
+    `<i class="fugaz lenta"></i><i class="fugaz lenta dos"></i><span class="planeta-ruta">${PLANETA}</span><span class="lunita-ruta">${LUNITA}</span>`,
+  arcade: () => `${REJILLA}<span class="sprite-ruta"><span class="sprite-salta">${SPRITE}</span></span><i class="neon-sol"></i>`,
+  navidad: () => `${LUCES}${copos(10, 'copo copo-suave')}${ABETOS}`,
+  vineta: () => `${NUBE_VINETA('a')}${NUBE_VINETA('b')}${ONOMATOPEYA('¡PLIC!', 'plic', '#8EE0C8')}${ONOMATOPEYA('¡ZAS!', 'zas', '#FFC94D')}`,
 };
 
 /** Miniatura estática de cada escena para las tarjetas de la tienda. */
@@ -421,6 +449,10 @@ export const MINIATURAS = {
   estrellas: '<svg viewBox="0 0 60 40"><path d="M8 8l30 14" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="40" cy="23" r="2.5" fill="#FFC94D"/><circle cx="12" cy="30" r="1.3" fill="#fff"/><circle cx="50" cy="8" r="1.3" fill="#fff"/><circle cx="26" cy="34" r="1" fill="#fff"/></svg>',
   arcoiris: '<svg viewBox="0 0 60 40">' + ['#FF6B5E', '#FFC94D', '#8EE0C8', '#8FA8F0', '#C9BFF0'].map((c, i) => `<path d="M${6 + i * 4} 38a${24 - i * 4} ${24 - i * 4} 0 0 1 ${48 - i * 8} 0" fill="none" stroke="${c}" stroke-width="4"/>`).join('') + '</svg>',
   cometa: '<svg viewBox="0 0 60 40"><path d="M36 3l9 11-9 12-9-12z" fill="#FF6B5E"/><path d="M36 26q-6 6-2 10" fill="none" stroke="#1E2749" stroke-width="1"/></svg>',
+  espacio: '<svg viewBox="0 0 60 40"><rect width="60" height="40" fill="#1B266C"/><circle cx="8" cy="8" r="1" fill="#fff"/><circle cx="52" cy="6" r="1.2" fill="#fff"/><circle cx="22" cy="33" r=".9" fill="#fff"/><path d="M4 14l14 6" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".8"/><ellipse cx="38" cy="22" rx="16" ry="4" fill="none" stroke="#FFC94D" stroke-width="1.6"/><circle cx="38" cy="21" r="8" fill="#8FA8F0"/><path d="M22 22a16 4 0 0 0 32 0" fill="none" stroke="#FFC94D" stroke-width="1.6"/></svg>',
+  arcade: '<svg viewBox="0 0 60 40" shape-rendering="crispEdges"><rect width="60" height="40" fill="#2A0E3D"/><g stroke="#FF4FD8" stroke-width=".7"><path d="M0 26H60M0 30H60M0 35H60M30 24L30 40M22 24L12 40M38 24L48 40M14 24L-6 40M46 24L66 40"/></g><path d="M0 24H60" stroke="#3DF5FF"/><g transform="translate(24 8) scale(.8)"><path d="M5 2h5v1h1v1h3v1h1v5h-1v1H2v-1H1V5h1V4h2V3h1z" fill="#fff"/><path d="M5 6h1v1H5zM10 6h1v1h-1z" fill="#1C2340"/></g></svg>',
+  navidad: '<svg viewBox="0 0 60 40"><path d="M0 4q15 10 30 2t30 0" fill="none" stroke="#1E2749" stroke-width=".8" opacity=".5"/><circle cx="8" cy="8" r="2" fill="#FFC94D"/><circle cx="20" cy="10" r="2" fill="#E85D5D"/><circle cx="34" cy="6" r="2" fill="#5DBB7A"/><circle cx="48" cy="6" r="2" fill="#FFC94D"/><path d="M14 14l8 12h-4l6 9H6l6-9H8z" fill="#3F9E5A"/><path d="M0 36q30-6 60 0V40H0z" fill="#fff"/><circle cx="42" cy="20" r="1.3" fill="#fff"/><circle cx="52" cy="28" r="1" fill="#fff"/></svg>',
+  vineta: '<svg viewBox="0 0 60 40"><path d="M8 20a5 5 0 0 1 0-10 7 7 0 0 1 13-2 6 6 0 0 1 9 6 4 4 0 0 1-1 6z" fill="#fff" stroke="#1E2749" stroke-width="1.6"/><path d="M42 12l4 6 7-4-1 7 8-1-5 6 7 4-8 1 3 7-7-3-3 7-4-6-5 6-1-8-7 3 3-7-7-3 8-3-4-6 8 1 1-8z" fill="#FFC94D" stroke="#1E2749" stroke-width="1.3"/><text x="45" y="28" text-anchor="middle" font-family="system-ui" font-weight="900" font-size="6.5" fill="#1E2749">¡ZAS!</text></svg>',
 };
 
 // ---------- Temas de color para «Hoy» (tienda) ----------
@@ -443,6 +475,30 @@ export const TEMAS_HOY = {
     oscuro: { 5: ['#4B4410', '#3A340E', '#25210A'], 4: ['#1E4A22', '#173A1B', '#0F2712'], 3: ['#2C3D2E', '#233124', '#18221A'], 2: ['#144034', '#103329', '#0A241D'], 1: ['#0F2A16', '#0B2111', '#07160B'] },
   },
 };
+
+// Temas de los packs (mismas reglas de contraste; se comprueban en las pruebas).
+Object.assign(TEMAS_HOY, {
+  'tema-espacio': {
+    nombre: 'Noche espacial',
+    claro: { 5: ['#F6D656', '#F9E286', '#FCF1C5'], 4: ['#C6D1F5', '#DAE2F9', '#EFF2FC'], 3: ['#C5C2ED', '#D8D5F3', '#EDECF9'], 2: ['#96B9E9', '#B7CFF0', '#E0EAF8'], 1: ['#1B266C', '#28389F', '#4154CF'] },
+    oscuro: { 5: ['#4E411A', '#3B3114', '#27200D'], 4: ['#12254A', '#0E1C39', '#0A1429'], 3: ['#362C74', '#2B235E', '#1F1A44'], 2: ['#193964', '#142D4F', '#0E1F37'], 1: ['#182472', '#131D5C', '#0D133D'] },
+  },
+  'tema-neon': {
+    nombre: 'Neón',
+    claro: { 5: ['#F9FF4D', '#FBFF80', '#FDFFC2'], 4: ['#76F8F3', '#A6FAF7', '#D7FDFC'], 3: ['#F7B8F2', '#FACEF6', '#FDE8FB'], 2: ['#C19AF7', '#D5BAF9', '#ECE1FD'], 1: ['#4A105D', '#70198D', '#A324CD'] },
+    oscuro: { 5: ['#3A490D', '#2D380A', '#1C2306'], 4: ['#084C4C', '#063939', '#042727'], 3: ['#631957', '#511447', '#3B0F34'], 2: ['#411A78', '#341461', '#250E44'], 1: ['#491264', '#3B0E51', '#280A37'] },
+  },
+  'tema-navidad': {
+    nombre: 'Navidad',
+    claro: { 5: ['#F3CE70', '#F7DD9C', '#FBF0D2'], 4: ['#A7DEB9', '#C8EAD3', '#E6F6EB'], 3: ['#EFC0C4', '#F4D4D6', '#FAEBEC'], 2: ['#ACD3C6', '#C6E1D8', '#E6F2EE'], 1: ['#551923', '#7F2534', '#B9364C'] },
+    oscuro: { 5: ['#513E17', '#3F3012', '#281E0C'], 4: ['#17452A', '#123521', '#0D2617'], 3: ['#62252A', '#4F1E22', '#391619'], 2: ['#1B3F36', '#15322B', '#0F221D'], 1: ['#521B25', '#42161D', '#2C0F14'] },
+  },
+  'tema-primarios': {
+    nombre: 'Primarios',
+    claro: { 5: ['#FFE14D', '#FFEA80', '#FFF5C2'], 4: ['#F9C6C5', '#FBD9D8', '#FDF1F0'], 3: ['#BAD8F5', '#D0E4F8', '#E9F3FC'], 2: ['#93AEEC', '#B5C7F2', '#DFE7F9'], 1: ['#192A62', '#253E93', '#3D5FCE'] },
+    oscuro: { 5: ['#4F4314', '#3B320F', '#251F09'], 4: ['#451917', '#351312', '#260E0D'], 3: ['#1E3B5B', '#182E48', '#112133'], 2: ['#1F366B', '#192B55', '#111E3C'], 1: ['#1A2966', '#142051', '#0E1637'] },
+  },
+});
 
 // ---------- Reacciones nuevas al registrar (tienda) ----------
 export const REACCIONES_EXTRA = {

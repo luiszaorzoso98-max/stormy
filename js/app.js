@@ -10,7 +10,7 @@ import {
 } from './contenido.js';
 import { MODO_NORMAL, NIMBO, PERSONALIDADES, conEstilo, conPersonalidad, reaccion, responder, saludo, sugerenciasDe } from './asistente.js';
 import {
-  CATALOGO, COFRES, COFRE_GRATIS, COLECCIONABLES, GARANTIA, RAREZAS, TIPOS, abrirCofre as abreCofreTienda, aplicaComodin, cofre, cofresGratis,
+  CATALOGO, COFRES, COFRE_GRATIS, COLECCIONABLES, DE_COFRE, PACKS, TEMPORADAS, GARANTIA, aLaVenta, RAREZAS, TIPOS, abrirCofre as abreCofreTienda, aplicaComodin, cofre, cofresGratis,
   BONO_NIVEL, CHAT, bonosNivel, chatHoy, comprar, destacadoDe, enTienda, equipar, estadoColeccion, garantiaEn, objeto, premioChat, premioCuriosidad,
   coleccionDe, previsualiza, puedeComprarComodin, puedeSalir, tiendaVacia, vistaPuedeSalir,
 } from './tienda.js';
@@ -445,7 +445,7 @@ function vistaHoy() {
   const avisoInstalar = faltaInstalar() && !instalarOcultoHoy()
     ? `<div class="aviso-instalar" role="status"><button type="button" data-accion="verInstalar">${ICONOS.subir}<span>Stormy no está instalada · <u>Cómo instalar</u></span></button>
         <button type="button" class="cerrar" data-accion="ocultarInstalar" aria-label="Ocultar hasta mañana">×</button></div>` : '';
-  return `<main class="hoy">
+  return `<main class="hoy${escenaHoy ? ' con-escena' : ''}">
     ${avisoInstalar}
     <header class="cabecera">
       <div><h1>${esc(casaDe(perfil))}</h1><p>${fechaLarga(hoy)}</p></div>
@@ -765,6 +765,7 @@ function tarjetaObjeto(o, destacado = false) {
       <div class="objeto-previa">${previa(o, destacado ? 84 : 64)}</div>
       ${insignia(o.rareza)}
       <h4>${o.nombre}</h4>
+      ${o.pack ? `<p class="mini pack-de">${PACKS[o.pack]}${o.via === 'temporada' ? ' · de temporada' : ''}</p>` : ''}
       ${nota ? `<p class="mini">${nota}</p>` : ''}
       ${botonObjeto(o)}
       ${o.tipo !== 'comodin' && !tuyo ? `<button type="button" class="enlace-pequeno probar" data-accion="probar" data-id="${o.id}">Probar</button>` : ''}
@@ -807,7 +808,7 @@ function vistaTienda() {
   } else {
     const gratis = !t.bienvenida ? 'bienvenida' : cofresGratis(t, partes) > 0 ? 'semanal' : null;
     const destacado = destacadoDe(hoyIso(), t);
-    const visibles = enTienda(t);
+    const visibles = enTienda(t, hoyIso());
     const categorias = CATEGORIAS.map(([tipo, nombre]) => [nombre, visibles.filter((o) => o.tipo === tipo)]).filter(([, l]) => l.length);
     const soloComodin = visibles.every((o) => o.tipo === 'comodin');
     cuerpo = `${destacado ? `<h2 class="titulo-bloque">Destacado</h2>${tarjetaObjeto(destacado, true)}` : ''}
@@ -847,7 +848,7 @@ function piezaOriginal(tipo, t) {
 
 /** Pieza de la colección según su estado: tuya, en la tienda (atenuada con candado) o misterio (solo en cofres). */
 function piezaColeccion(o, t) {
-  const estado = estadoColeccion(o, t);
+  const estado = estadoColeccion(o, t, hoyIso());
   if (estado === 'puesto' || estado === 'mio') {
     // Tocar algo tuyo abre la vista previa, con «Equipar».
     return `<button type="button" class="pieza marco-${o.rareza} mia ${estado === 'puesto' ? 'puesta' : ''}" data-accion="probar" data-id="${o.id}" aria-label="${o.nombre}${estado === 'puesto' ? ', equipado' : ''}. Ver cómo queda">
@@ -859,6 +860,13 @@ function piezaColeccion(o, t) {
       <span class="candado-mini">${ICONOS.candado}</span><div class="objeto-previa">${previa(o, 52)}</div><h4>${o.nombre}</h4>
       <span class="precio-silueta en-tienda-precio"><small>En la tienda</small><b>${ICONOS.rayo}${o.precio}</b></span></button>`;
   }
+  if (estado === 'temporada') {
+    // Fuera de temporada: se ve, sin precio ni cuenta atrás; vuelve sola cuando toca.
+    const vuelve = TEMPORADAS[o.temporada]?.vuelve ?? 'Vuelve pronto';
+    return `<article class="pieza marco-${o.rareza} en-tienda fuera-temporada" aria-label="${o.nombre}: ${vuelve.toLowerCase()}">
+      <div class="objeto-previa">${previa(o, 52)}</div><h4>${o.nombre}</h4>
+      <span class="precio-silueta en-tienda-precio"><small>${vuelve}</small></span></article>`;
+  }
   return `<article class="pieza marco-${o.rareza} misterio ${o.rareza === 'legendario' ? 'misterio-legendario' : ''}" aria-label="Objeto ${RAREZAS[o.rareza].nombre.toLowerCase()} sin descubrir, solo en cofres">
     <div class="objeto-previa"><span class="interrogante" aria-hidden="true">?</span></div><h4>???</h4><span class="solo-cofres">Solo en cofres</span></article>`;
 }
@@ -869,7 +877,7 @@ function hojaProbabilidades() {
   const t = tiendaDe();
   const g = garantiaEn(t);
   const filas = Object.entries(c.prob).map(([r, v]) => {
-    const objetos = COLECCIONABLES.filter((o) => o.rareza === r);
+    const objetos = DE_COFRE.filter((o) => o.rareza === r);
     return `<tr><th scope="row"><span class="punto-rareza ${r}"></span>${RAREZAS[r].nombre}</th><td>${pctProb(v)}</td><td>${objetos.length}</td><td>${pctProb(v / objetos.length)}</td></tr>`;
   }).join('');
   return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Hecho</button></div>
@@ -998,7 +1006,7 @@ function muestraHoy(t, o) {
   const sobre = oscuro || tiempo === 1 ? '#F4F2FB' : '#1E2749';
   const escena = t.equipado.escena;
   return `<div class="mock-hoy" style="background:linear-gradient(${c[0]}, ${c[1]} 55%, ${c[2]});color:${sobre}">
-    <div class="mock-cab"><b>${esc(casaDe(E().perfil))}</b><span>${fechaLarga(hoy)}</span></div>
+    <div class="mock-cab">${t.equipado.cara ? `<span class="mock-cara">${avatarNimbo(30, false, t.equipado.cara)}</span>` : ''}<b>${esc(casaDe(E().perfil))}</b><span>${fechaLarga(hoy)}</span></div>
     <div class="mock-heroe"><span class="disco">${iconoTiempo(tiempo, 40)}</span><b>${campo.titulo}</b></div>
     <div class="mock-tarjeta"></div><div class="mock-tarjeta corta"></div>
     ${escena && ESCENAS[escena] ? `<div class="escena-banda mock-banda">${ESCENAS[escena]()}</div>` : '<div class="mock-banda vacia"></div>'}
@@ -1007,11 +1015,15 @@ function muestraHoy(t, o) {
 
 function hojaProbar() {
   const o = objeto(ui.hoja.id);
-  const t = previsualiza(tiendaDe(), o);
+  // Con un objeto de pack, la vista previa enseña el pack entero (cara, escena y tema juntos).
+  const delPack = o.pack ? CATALOGO.filter((x) => x.pack === o.pack) : [o];
+  const t = delPack.reduce((acc, x) => previsualiza(acc, x), tiendaDe());
   const tuyo = tiendaDe().comprados.includes(o.id);
   const puesto = tiendaDe().equipado[o.tipo] === o.id;
   let vista;
-  if (o.tipo === 'cara') {
+  if (o.pack) {
+    vista = `<div class="probar-pack">${avatarNimbo(84, false, t.equipado.cara)}${muestraHoy(t, o)}<p class="mini centro">${PACKS[o.pack]}: así queda con todo puesto</p></div>`;
+  } else if (o.tipo === 'cara') {
     vista = `<div class="probar-cara">${avatarNimbo(132, false, o.id)}<div class="probar-barra">${avatarNimbo(54, false, o.id)}<span>Así se ve en la barra</span></div></div>`;
   } else if (o.tipo === 'escena' || o.tipo === 'tema') {
     vista = muestraHoy(t, o);
@@ -1024,7 +1036,8 @@ function hojaProbar() {
   const falta = o.precio - saldoActual();
   const principal = tuyo
     ? (puesto ? '<button type="button" class="principal" data-accion="cerrarHoja">Ya lo llevas puesto</button>' : `<button type="button" class="principal" data-accion="equiparProbado">Equipar</button>`)
-    : o.via !== 'tienda' ? '<button type="button" class="principal" data-accion="cerrarHoja">Solo sale en cofres</button>'
+    : o.via === 'cofre' ? '<button type="button" class="principal" data-accion="cerrarHoja">Solo sale en cofres</button>'
+      : !aLaVenta(o, hoyIso()) ? `<button type="button" class="principal" data-accion="cerrarHoja">${TEMPORADAS[o.temporada]?.vuelve ?? 'No está a la venta'}</button>`
       : falta > 0 ? `<button type="button" class="principal sin-rayos" aria-disabled="true" data-accion="sinRayos" data-falta="${falta}">Te faltan ${falta} ⚡</button>`
         : `<button type="button" class="principal" data-accion="comprarProbado">${ICONOS.rayo}Comprar y equipar · ${o.precio}</button>`;
   return `<div class="hoja-cab fin"><button class="texto-boton" data-accion="cerrarHoja">Cerrar</button></div>

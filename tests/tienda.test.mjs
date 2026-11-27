@@ -26,7 +26,7 @@ test('catálogo: precios baratos, rarezas y legendarios acordados', () => {
     assert.ok(RAREZAS[o.rareza], o.id);
   }
   const legendarios = CATALOGO.filter((o) => o.rareza === 'legendario').map((o) => o.id).sort();
-  assert.deepEqual(legendarios, ['arcoiris', 'corona', 'estrellas', 'poeta']);
+  assert.deepEqual(legendarios, ['arcoiris', 'astronauta', 'corona', 'espacio', 'estrellas', 'poeta', 'tema-espacio']);
   assert.deepEqual(COFRES.map((c) => [c.id, c.precio]), [['nube', 40], ['tormenta', 90], ['arcoiris', 180]]);
   for (const c of COFRES) assert.ok(Math.abs(c.prob.comun + c.prob.raro + c.prob.legendario - 1) < 1e-9, c.id);
   // Cuanto más caro el cofre, mejor la probabilidad de legendario.
@@ -275,10 +275,11 @@ test('personalidades: solo visten el texto, no lo cambian', () => {
 });
 
 test('reparto tienda / cofre: comunes en la tienda, legendarios exclusivos, raros mitad y mitad, cada categoría con los dos', () => {
-  for (const o of CATALOGO) assert.ok(['tienda', 'cofre'].includes(o.via), o.id);
+  for (const o of CATALOGO) assert.ok(['tienda', 'cofre', 'temporada'].includes(o.via), o.id);
   assert.ok(CATALOGO.filter((o) => o.rareza === 'comun').every((o) => o.via === 'tienda'));
-  assert.deepEqual(CATALOGO.filter((o) => o.rareza === 'legendario').map((o) => o.via), ['cofre', 'cofre', 'cofre', 'cofre']);
-  const raros = CATALOGO.filter((o) => o.rareza === 'raro');
+  assert.ok(CATALOGO.filter((o) => o.rareza === 'legendario').every((o) => o.via === 'cofre'));
+  // Los raros de temporada no cuentan en el reparto: ni se venden todo el año ni salen en cofres.
+  const raros = CATALOGO.filter((o) => o.rareza === 'raro' && o.via !== 'temporada');
   assert.equal(raros.filter((o) => o.via === 'tienda').length, raros.length / 2);
   for (const tipo of ['cara', 'escena', 'tema', 'reaccion', 'personalidad']) {
     const deTipo = COLECCIONABLES.filter((o) => o.tipo === tipo);
@@ -294,13 +295,13 @@ test('los exclusivos no se pueden comprar, pero sí salen en los cofres', () => 
 });
 
 test('lista de la tienda: sin lo que ya tienes ni lo exclusivo; el comodín siempre', () => {
-  const vacia = enTienda(tiendaVacia());
+  const vacia = enTienda(tiendaVacia(), HOY);
   assert.ok(vacia.every((o) => o.via === 'tienda'));
   assert.ok(!vacia.some((o) => o.id === 'corona'));
   const t = comprar(tiendaVacia(), 'gafas', 999, HOY).tienda;
-  assert.ok(!enTienda(t).some((o) => o.id === 'gafas'));
+  assert.ok(!enTienda(t, HOY).some((o) => o.id === 'gafas'));
   const todo = { ...tiendaVacia(), comprados: COLECCIONABLES.filter((o) => o.via === 'tienda').map((o) => o.id) };
-  assert.deepEqual(enTienda(todo).map((o) => o.id), ['comodin']);
+  assert.deepEqual(enTienda(todo, HOY).map((o) => o.id), ['comodin']);
   assert.equal(destacadoDe(HOY, todo), null);
   assert.equal(destacadoDe(HOY, t).via, 'tienda');
   assert.notEqual(destacadoDe(HOY, t).id, 'gafas');
@@ -309,7 +310,7 @@ test('lista de la tienda: sin lo que ya tienes ni lo exclusivo; el comodín siem
 test('estados de la colección', () => {
   let t = comprar(tiendaVacia(), 'gafas', 999, HOY).tienda;
   const o = (id) => CATALOGO.find((x) => x.id === id);
-  assert.equal(estadoColeccion(o('gafas'), t), 'mio');
+  assert.equal(estadoColeccion(o('gafas'), t, HOY), 'mio');
   t = equipar(t, 'cara', 'gafas');
   assert.equal(estadoColeccion(o('gafas'), t), 'puesto');
   assert.equal(estadoColeccion(o('bigote'), t), 'tienda');
@@ -319,8 +320,9 @@ test('estados de la colección', () => {
 test('«Puede salir»: legendarios primero y todo agrupado por rareza', () => {
   const grupos = puedeSalir('arcoiris');
   assert.deepEqual(grupos.map((g) => g.rareza), ['legendario', 'raro', 'comun']);
-  assert.deepEqual(grupos[0].objetos.map((x) => x.id).sort(), ['arcoiris', 'corona', 'estrellas', 'poeta']);
-  assert.equal(grupos.reduce((n, g) => n + g.objetos.length, 0), COLECCIONABLES.length);
+  assert.deepEqual(grupos[0].objetos.map((x) => x.id).sort(), ['arcoiris', 'astronauta', 'corona', 'espacio', 'estrellas', 'poeta', 'tema-espacio']);
+  // Todo lo coleccionable menos lo de temporada.
+  assert.equal(grupos.reduce((n, g) => n + g.objetos.length, 0), COLECCIONABLES.filter((o) => o.via !== 'temporada').length);
   assert.equal(grupos[0].prob, 0.3);
   assert.deepEqual(puedeSalir('nada'), []);
 });
@@ -416,32 +418,32 @@ test('«Puede salir» con intriga: dos legendarios a la vista, el resto y los ra
   const vacia = tiendaVacia();
   const [leg, raro, comun] = vistaPuedeSalir('arcoiris', vacia, HOY);
   assert.equal(leg.visibles.length, 2);
-  assert.equal(leg.ocultos, 2);
+  assert.equal(leg.ocultos, 5);
   assert.ok(leg.visibles.every((o) => o.rareza === 'legendario'));
   assert.deepEqual(vistaPuedeSalir('arcoiris', vacia, HOY)[0].visibles, leg.visibles); // mismo día, mismos
   const otroDia = vistaPuedeSalir('arcoiris', vacia, dia(1))[0].visibles.map((o) => o.id);
   assert.notDeepEqual(otroDia, leg.visibles.map((o) => o.id)); // cambia de un día a otro
   assert.ok(raro.visibles.every((o) => o.via === 'tienda'));
-  assert.equal(raro.ocultos, 5);
+  assert.equal(raro.ocultos, 8); // 5 de antes + los 3 de Dibujos animados
   assert.equal(comun.resumen, 7);
   // Los tuyos se ven primero; con todos, no queda misterio.
   const conCorona = { ...vacia, comprados: ['corona', 'dormido'] };
   const v = vistaPuedeSalir('arcoiris', conCorona, HOY);
   assert.equal(v[0].visibles[0].id, 'corona');
   assert.ok(v[1].visibles.some((o) => o.id === 'dormido'));
-  assert.equal(v[1].ocultos, 4);
+  assert.equal(v[1].ocultos, 7);
   const todo = { ...vacia, comprados: COLECCIONABLES.map((o) => o.id) };
   assert.deepEqual(vistaPuedeSalir('arcoiris', todo, HOY).slice(0, 2).map((g) => g.ocultos), [0, 0]);
-  assert.equal(vistaPuedeSalir('arcoiris', todo, HOY)[0].visibles.length, 4);
+  assert.equal(vistaPuedeSalir('arcoiris', todo, HOY)[0].visibles.length, 7);
 });
 
 test('colección por categoría: los exclusivos que no tienes se agrupan en una ficha', () => {
   const c = coleccionDe('cara', tiendaVacia());
-  assert.equal(c.ocultos, 2); // dormido y corona
+  assert.equal(c.ocultos, 4); // dormido, corona, astronauta y cartoon
   assert.equal(c.legendario, true);
-  assert.ok(c.visibles.every((o) => o.via === 'tienda'));
-  const con = coleccionDe('cara', { ...tiendaVacia(), comprados: ['corona'] });
-  assert.equal(con.ocultos, 1);
+  assert.ok(c.visibles.every((o) => o.via !== 'cofre'));
+  const con = coleccionDe('cara', { ...tiendaVacia(), comprados: ['corona', 'astronauta'] });
+  assert.equal(con.ocultos, 2);
   assert.equal(con.legendario, false);
   assert.ok(con.visibles.some((o) => o.id === 'corona'));
 });

@@ -15,9 +15,11 @@ export const TIPOS = {
 };
 
 /**
- * Cómo se consigue cada objeto: «tienda» se compra directamente; «cofre» solo sale en los cofres (exclusivo).
- * Reparto: todos los comunes en la tienda; los cuatro legendarios, exclusivos; los raros, mitad y mitad,
+ * Cómo se consigue cada objeto: «tienda» se compra directamente; «cofre» solo sale en los cofres (exclusivo);
+ * «temporada» se compra solo en su temporada (Navidad) y no sale en cofres.
+ * Reparto: todos los comunes en la tienda; los legendarios, exclusivos; los raros fuera de temporada, mitad y mitad,
  * de modo que cada categoría tenga algo comprable y algo que solo da la suerte.
+ * Los packs (campo `pack`) son conjuntos de cara, escena y tema que combinan entre sí.
  */
 export const CATALOGO = [
   { id: 'gafas', tipo: 'cara', nombre: 'Gafas de sol', rareza: 'comun', precio: 40, via: 'tienda' },
@@ -41,9 +43,43 @@ export const CATALOGO = [
   { id: 'telediario', tipo: 'personalidad', nombre: 'Modo telediario', rareza: 'raro', precio: 60, via: 'tienda' },
   { id: 'abuela', tipo: 'personalidad', nombre: 'Modo abuela', rareza: 'raro', precio: 60, via: 'cofre' },
   { id: 'poeta', tipo: 'personalidad', nombre: 'Modo poeta', rareza: 'legendario', precio: 100, via: 'cofre' },
+  // Pack Espacio: legendario, solo en cofres.
+  { id: 'astronauta', tipo: 'cara', nombre: 'Stormy astronauta', rareza: 'legendario', precio: 120, via: 'cofre', pack: 'espacio' },
+  { id: 'espacio', tipo: 'escena', nombre: 'Viaje espacial', rareza: 'legendario', precio: 110, via: 'cofre', pack: 'espacio' },
+  { id: 'tema-espacio', tipo: 'tema', nombre: 'Tema Noche espacial', rareza: 'legendario', precio: 110, via: 'cofre', pack: 'espacio' },
+  // Pack Arcade: raro, en la tienda.
+  { id: 'pixel', tipo: 'cara', nombre: 'Stormy de píxeles', rareza: 'raro', precio: 70, via: 'tienda', pack: 'arcade' },
+  { id: 'arcade', tipo: 'escena', nombre: 'Salón recreativo', rareza: 'raro', precio: 80, via: 'tienda', pack: 'arcade' },
+  { id: 'tema-neon', tipo: 'tema', nombre: 'Tema Neón', rareza: 'raro', precio: 70, via: 'tienda', pack: 'arcade' },
+  // Pack Navidad: de temporada (del 1 de diciembre al 6 de enero). Lo que ya es tuyo se usa todo el año.
+  { id: 'gorro-navidad', tipo: 'cara', nombre: 'Gorro de invierno', rareza: 'raro', precio: 60, via: 'temporada', temporada: 'navidad', pack: 'navidad' },
+  { id: 'navidad', tipo: 'escena', nombre: 'Nieve y luces', rareza: 'raro', precio: 80, via: 'temporada', temporada: 'navidad', pack: 'navidad' },
+  { id: 'tema-navidad', tipo: 'tema', nombre: 'Tema Navidad', rareza: 'raro', precio: 70, via: 'temporada', temporada: 'navidad', pack: 'navidad' },
+  // Pack Dibujos animados: raro, solo en cofres.
+  { id: 'cartoon', tipo: 'cara', nombre: 'Stormy de dibujos', rareza: 'raro', precio: 70, via: 'cofre', pack: 'dibujos' },
+  { id: 'vineta', tipo: 'escena', nombre: 'Viñeta de cómic', rareza: 'raro', precio: 80, via: 'cofre', pack: 'dibujos' },
+  { id: 'tema-primarios', tipo: 'tema', nombre: 'Tema Primarios', rareza: 'raro', precio: 70, via: 'cofre', pack: 'dibujos' },
   { id: 'comodin', tipo: 'comodin', nombre: 'Comodín de racha', rareza: 'comun', precio: 60, via: 'tienda' },
 ];
 export const objeto = (id) => CATALOGO.find((o) => o.id === id) ?? null;
+
+/** Packs: nombre para la tienda y la colección. */
+export const PACKS = { espacio: 'Pack Espacio', arcade: 'Pack Arcade', navidad: 'Pack Navidad', dibujos: 'Pack Dibujos animados' };
+
+/**
+ * Temporadas: del 1 de diciembre al 6 de enero (ambos incluidos), con la fecha del dispositivo.
+ * Fuera de temporada, lo de Navidad no se vende ni sale en cofres; lo que ya es tuyo se sigue usando.
+ */
+export const TEMPORADAS = { navidad: { nombre: 'Navidad', vuelve: 'Vuelve en Navidad' } };
+const dosCifras = (n) => String(n).padStart(2, '0');
+const hoyLocal = () => { const f = new Date(); return `${f.getFullYear()}-${dosCifras(f.getMonth() + 1)}-${dosCifras(f.getDate())}`; };
+export function enTemporada(temporada, hoy = hoyLocal()) {
+  if (temporada !== 'navidad') return false;
+  const [, m, d] = String(hoy).split('-').map(Number);
+  return m === 12 || (m === 1 && d <= 6);
+}
+/** ¿Se puede comprar hoy? Lo de la tienda, siempre; lo de temporada, solo en su temporada. */
+export const aLaVenta = (o, hoy = hoyLocal()) => o.via === 'tienda' || (o.via === 'temporada' && enTemporada(o.temporada, hoy));
 
 /** Probabilidades de cada cofre (suman 1). Cuanto más caro, mejores. */
 export const COFRES = [
@@ -57,15 +93,17 @@ export const cofre = (id) => COFRES.find((c) => c.id === id) ?? null;
  * el 20.º trae un legendario. Los contadores se guardan y vuelven a cero cuando sale lo garantizado.
  */
 export const GARANTIA = { raro: 5, legendario: 20 };
-/** Objetos que pueden salir en los cofres: todo menos el comodín, que es un consumible. */
+/** Objetos de la colección: todo menos el comodín, que es un consumible. */
 export const COLECCIONABLES = CATALOGO.filter((o) => o.tipo !== 'comodin');
+/** Lo que puede salir en los cofres: la colección menos lo de temporada (eso solo se compra en su temporada). */
+export const DE_COFRE = COLECCIONABLES.filter((o) => o.via !== 'temporada');
 /** Cuántos cofres faltan para el raro y el legendario garantizados (1 = el próximo). */
 export const garantiaEn = (tienda) => ({
   raro: GARANTIA.raro - tienda.pity.sinRaro, legendario: GARANTIA.legendario - tienda.pity.sinLegendario,
 });
 /** Objeto destacado del día: rota cada día según la fecha, sin cuentas atrás. */
 export function destacadoDe(hoy, tienda = null) {
-  const lista = tienda ? enTienda(tienda).filter((o) => o.tipo !== 'comodin') : COLECCIONABLES.filter((o) => o.via === 'tienda');
+  const lista = tienda ? enTienda(tienda, hoy).filter((o) => o.tipo !== 'comodin') : COLECCIONABLES.filter((o) => aLaVenta(o, hoy));
   if (!lista.length) return null;
   const [a, m, d] = hoy.split('-').map(Number);
   const n = Math.round(Date.UTC(a, m - 1, d) / 864e5);
@@ -90,7 +128,7 @@ export function vistaPuedeSalir(cofreId, tienda, hoy) {
       return { rareza, prob, visibles: unicos, ocultos: objetos.length - unicos.length };
     }
     if (rareza === 'raro') {
-      const visibles = objetos.filter((o) => o.via === 'tienda' || mio(o));
+      const visibles = objetos.filter((o) => o.via !== 'cofre' || mio(o));
       return { rareza, prob, visibles, ocultos: objetos.length - visibles.length };
     }
     return { rareza, prob, visibles: [], ocultos: 0, resumen: objetos.length };
@@ -104,13 +142,17 @@ export function coleccionDe(tipo, tienda) {
   return { visibles: deTipo.filter((o) => !ocultos.includes(o)), ocultos: ocultos.length, legendario: ocultos.some((o) => o.rareza === 'legendario') };
 }
 
-/** Lo que se ve en la tienda: lo comprable que aún no tienes (el comodín siempre está). */
-export const enTienda = (tienda) => CATALOGO.filter((o) => o.via === 'tienda' && (o.tipo === 'comodin' || !tienda.comprados.includes(o.id)));
+/** Lo que se ve en la tienda: lo comprable hoy que aún no tienes (el comodín siempre está). */
+export const enTienda = (tienda, hoy = hoyLocal()) => CATALOGO.filter((o) => aLaVenta(o, hoy) && (o.tipo === 'comodin' || !tienda.comprados.includes(o.id)));
 
-/** Estado de un objeto en la colección: «puesto», «mio», «tienda» (se puede comprar) o «cofre» (solo en cofres). */
-export function estadoColeccion(o, tienda) {
+/**
+ * Estado de un objeto en la colección: «puesto», «mio», «tienda» (se puede comprar), «cofre» (solo en cofres)
+ * o «temporada» (de temporada y fuera de ella: «Vuelve en Navidad»).
+ */
+export function estadoColeccion(o, tienda, hoy = hoyLocal()) {
   if (tienda.comprados.includes(o.id)) return tienda.equipado[o.tipo] === o.id ? 'puesto' : 'mio';
-  return o.via === 'cofre' ? 'cofre' : 'tienda';
+  if (o.via === 'cofre') return 'cofre';
+  return aLaVenta(o, hoy) ? 'tienda' : 'temporada';
 }
 
 /** «Puede salir» de un cofre: los objetos de cada rareza que tiene alguna probabilidad, legendarios primero. */
@@ -118,7 +160,7 @@ export function puedeSalir(cofreId) {
   const c = cofre(cofreId);
   if (!c) return [];
   return ['legendario', 'raro', 'comun'].filter((r) => c.prob[r] > 0).map((r) => ({
-    rareza: r, prob: c.prob[r], objetos: COLECCIONABLES.filter((o) => o.rareza === r),
+    rareza: r, prob: c.prob[r], objetos: DE_COFRE.filter((o) => o.rareza === r),
   }));
 }
 /** Generador de números reproducible (mulberry32), para pruebas y simulaciones. */
@@ -286,7 +328,8 @@ export function comprar(tienda, id, ganados, hoy) {
   const o = objeto(id);
   if (!o) return { ok: false, tienda, motivo: 'Ese objeto no existe' };
   if (o.tipo !== 'comodin' && tienda.comprados.includes(id)) return { ok: false, tienda, motivo: 'Ya es tuyo' };
-  if (o.via !== 'tienda') return { ok: false, tienda, motivo: 'Solo sale en cofres' };
+  if (o.via === 'cofre') return { ok: false, tienda, motivo: 'Solo sale en cofres' };
+  if (!aLaVenta(o, hoy)) return { ok: false, tienda, motivo: TEMPORADAS[o.temporada]?.vuelve ?? 'No está a la venta' };
   if (o.tipo === 'comodin') {
     const p = puedeComprarComodin(tienda, hoy);
     if (!p.ok) return { ok: false, tienda, motivo: p.motivo };
@@ -327,7 +370,7 @@ export function abrirCofre(tienda, cofreId, ganados, { azar = Math.random, grati
   const tirada = fijo ? fijo.rareza : rarezaDe(c.prob, azar);
   const rareza = fijo ? fijo.rareza : rarezaConGarantia(tirada, tienda.pity);
   // 2) Objeto: al azar entre los de esa rareza que aún no tienes; solo si ya los tienes todos, se repite.
-  const deRareza = COLECCIONABLES.filter((o) => o.rareza === rareza);
+  const deRareza = DE_COFRE.filter((o) => o.rareza === rareza);
   const nuevos = deRareza.filter((o) => !tienda.comprados.includes(o.id));
   const lista = nuevos.length ? nuevos : deRareza;
   const premio = fijo ?? lista[Math.min(lista.length - 1, Math.floor(azar() * lista.length))];

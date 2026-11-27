@@ -1231,6 +1231,61 @@ main.hoy { min-height: 100dvh; }
 /* Franja muy baja: sin escena, para no apretar el contenido. */
 @container banda (max-height: 26px) { .escena-banda > * { display: none; } }
 .escena-banda { container: banda / size; }
+/* Con una escena puesta, «Hoy» se aprieta un poco para dejarle a la franja al menos 80 px:
+   disco del tiempo más pequeño, la frase de niveles en una línea y menos aire entre tarjetas. */
+main.hoy.con-escena { gap: 8px; }
+main.hoy.con-escena .disco { width: 64px; height: 64px; }
+main.hoy.con-escena .disco svg { width: 48px; height: 48px; }
+main.hoy.con-escena .heroe h2 { font-size: 28px; }
+main.hoy.con-escena .heroe { gap: 6px; }
+main.hoy.con-escena .progreso-hoy .nota { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+main.hoy.con-escena .semana { margin-top: 6px; }
+main.hoy.con-escena .escena-banda { min-height: 80px; margin-bottom: -6px; }
+@media (max-height: 760px) { main.hoy.con-escena .escena-banda { min-height: 56px; } }
+
+/* ---------- Escenas de los packs ---------- */
+/* Espacio: planeta y luna que flotan despacio; estrellas fugaces lentas. */
+/* Estrellas y estelas en mango con un halo oscuro: se ven también sobre los cielos claros. */
+.escena-banda .estrella.astro { background: #FFC94D; box-shadow: 0 0 0 1px rgba(30, 39, 73, 0.25), 0 0 6px #FFC94D; }
+.escena-banda .estrella.astro:nth-child(3n) { background: #8FA8F0; box-shadow: 0 0 0 1px rgba(30, 39, 73, 0.2), 0 0 6px #8FA8F0; }
+.escena-banda .fugaz.lenta { top: 18%; animation-duration: 14s; background: linear-gradient(90deg, transparent, #FFC94D); }
+.escena-banda .fugaz.lenta.dos { top: 60%; animation-delay: 6s; animation-duration: 17s; }
+.escena-banda .planeta-ruta { right: 8%; top: 10%; height: 76%; max-height: 110px; aspect-ratio: 80 / 50; animation: flota-planeta 9s ease-in-out infinite; }
+.escena-banda .planeta-ruta svg, .escena-banda .lunita-ruta svg { width: 100%; height: 100%; display: block; }
+.escena-banda .lunita-ruta { left: 12%; top: 16%; width: 22px; height: 22px; animation: flota-planeta 7s ease-in-out infinite reverse; }
+@keyframes flota-planeta { 50% { transform: translateY(-5px) rotate(-3deg); } }
+/* Arcade: suelo de cuadrícula neón con un sol de neón al fondo y una figurita de píxeles que cruza saltando. */
+.escena-banda .rejilla-neon { left: 0; right: 0; bottom: 0; width: 100%; height: 72%; }
+.escena-banda .neon-sol { left: 50%; bottom: 56%; width: 30%; max-width: 130px; aspect-ratio: 2 / 1; transform: translateX(-50%); border-radius: 999px 999px 0 0; background: repeating-linear-gradient(#FFC94D 0 6px, #FF4FD8 6px 8px); opacity: 0.5; }
+.escena-banda .sprite-ruta { left: 12px; right: 12px; top: 0; bottom: 12%; }
+.escena-banda .sprite-salta { position: absolute; left: 0; bottom: 0; width: min(36px, 45cqh); aspect-ratio: 1; animation: sprite-cruza 9s ease-in-out infinite alternate; }
+.escena-banda .sprite-salta svg { width: 100%; height: 100%; display: block; --salto: min(24px, 35cqh); animation: sprite-bota 0.7s cubic-bezier(0.5, 0, 0.5, 1) infinite alternate; }
+@keyframes sprite-cruza { from { transform: translateX(0); } to { transform: translateX(calc(100cqw - 24px - min(36px, 45cqh))); } }
+@keyframes sprite-bota { from { transform: translateY(0); } to { transform: translateY(calc(-1 * var(--salto, 20px))); } }
+/* Navidad: guirnalda de luces que brillan suave, nieve lenta y dos abetos. */
+.escena-banda .guirnalda { left: 0; right: 0; top: 2%; width: 100%; height: 34%; }
+.escena-banda .bombilla-luz { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px rgba(255, 214, 120, 0.85); animation: brilla-luz 2.6s ease-in-out infinite; }
+@keyframes brilla-luz { 50% { opacity: 0.45; } }
+.escena-banda .copo-suave { opacity: 0.85; }
+.escena-banda .abetos { left: 3%; right: 3%; bottom: 0; width: 94%; height: 70%; }
+/* Dibujos animados: nubes de viñeta que se mueven poco y onomatopeyas que aparecen con un pequeño salto. */
+.escena-banda .nube-vineta { width: 24%; max-width: 104px; height: auto; aspect-ratio: 64 / 40; animation: deriva-vineta 11s ease-in-out infinite alternate; }
+.escena-banda .nube-vineta.a { left: 4%; top: 10%; }
+.escena-banda .nube-vineta.b { left: 30%; bottom: 6%; width: 18%; animation-duration: 14s; }
+@keyframes deriva-vineta { to { transform: translateX(16px); } }
+.escena-banda .onomatopeya { width: 28%; max-width: 120px; max-height: 70%; aspect-ratio: 100 / 60; animation: pop-vineta 5s ease-in-out infinite; }
+.escena-banda .onomatopeya svg { width: 100%; height: 100%; display: block; }
+.escena-banda .onomatopeya.plic { right: 5%; top: 6%; }
+.escena-banda .onomatopeya.zas { left: 56%; bottom: 4%; animation-delay: 2.5s; }
+@keyframes pop-vineta { 0%, 100% { transform: scale(0.92) rotate(-4deg); } 8% { transform: scale(1.08) rotate(3deg); } 16%, 92% { transform: scale(1) rotate(0); } }
+
+/* Vista previa de un pack: cara grande y la pantalla «Hoy» con todo puesto. */
+.probar-pack { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.mock-cab .mock-cara { float: right; margin-left: 6px; }
+.mock-cab .mock-cara .avatar-nimbo { display: inline-flex; }
+.pack-de { margin-top: 2px; font-weight: 600; }
+.pieza.fuera-temporada { opacity: 0.75; }
+
 @media (prefers-reduced-motion: reduce) { .escena-banda * { animation: none !important; } }
 
 /* Tienda: el contador de garantías se enseña una vez, encima de los cofres. */
